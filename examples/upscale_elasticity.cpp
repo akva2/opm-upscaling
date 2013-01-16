@@ -239,8 +239,13 @@ int main(int argc, char** argv)
       cells[0] = p.cellsx;
       cells[1] = p.cellsy;
       cells[2] = p.cellsz;
+      p.max[0] = p.max[0] > 0 ? p.max[0] : 1.0;
+      p.max[1] = p.max[1] > 0 ? p.max[1] : 1.0;
+      p.max[2] = p.max[2] > 0 ? p.max[2] : 1.0;
       Dune::array<double,3> cellsize;
-      cellsize[0] = cellsize[1] = cellsize[2] = 1.f; 
+      cellsize[0] = p.max[0]/cells[0];
+      cellsize[1] = p.max[1]/cells[1];
+      cellsize[2] = p.max[2]/cells[2];
       grid.createCartesian(cells,cellsize);
     } else
       grid.readEclipseFormat(p.file,p.ctol,false);
@@ -260,7 +265,7 @@ int main(int argc, char** argv)
       p.n1 = grid.logicalCartesianSize()[0];
       p.n2 = grid.logicalCartesianSize()[1];
     }
-    if (p.linsolver.zcells == -1) {
+    if (p.linsolver.agmin == -1) {
       double lz = p.max[2]-p.min[2];
       int nz = grid.logicalCartesianSize()[2];
       double hz = lz/nz;
@@ -268,7 +273,7 @@ int main(int argc, char** argv)
       int np = std::max(grid.logicalCartesianSize()[0],
                         grid.logicalCartesianSize()[1]);
       double hp = lp/np;
-      p.linsolver.zcells = (int)(2*hp/hz+0.5);
+      p.linsolver.agdim = (int)(2*hp/hz+0.5);
     }
     std::cout << "logical dimension: " << grid.logicalCartesianSize()[0]
               << "x"                   << grid.logicalCartesianSize()[1]

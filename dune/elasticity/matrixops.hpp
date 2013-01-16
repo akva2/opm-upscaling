@@ -82,6 +82,11 @@ class MatrixOps {
     //! \param[in] file File name
     //! \details This is only useful for debugging as the files grow very big
     static void saveAsc(const Matrix& A, const std::string& file);
+
+    //! \brief Renumber a square matrix
+    //! \param[in] A The matrix to renumber
+    //! \param[in] map The DOF map to apply
+    static Matrix renumber(const Matrix& A, const std::vector<int>& map);
 };
 
 #include "matrixops_impl.hpp"

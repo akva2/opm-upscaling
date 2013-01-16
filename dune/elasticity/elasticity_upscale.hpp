@@ -78,8 +78,17 @@ struct LinSolParams {
   //! \brief Coarsening target in the AMG
   int coarsen_target;
 
-  //! \brief Number of cells in z to collapse in each cell
-  int zcells;
+  //! \brief AMG aggregate diameter
+  int agdim;
+
+  //! \brief Minimum AMG aggregate size
+  int agmin;
+
+  //! \brief Minimum AMG aggregate size
+  int agmax;
+
+  //! \brief Maximum number of aggregate connections
+  int agcon;
 
   //! \brief Preconditioner for mortar block
   Opm::Elasticity::Preconditioner mortarpre;
@@ -107,7 +116,10 @@ struct LinSolParams {
       mortarpre = Opm::Elasticity::SCHURDIAG;
     uzawa = param.getDefault<bool>("linsolver_uzawa", false);
 
-    zcells = param.getDefault<int>("linsolver_zcells", 2);
+    agdim = param.getDefault<int>("linsolver_agdim", 2);
+    agmin = param.getDefault<int>("linsolver_agmin", 4);
+    agmax = param.getDefault<int>("linsolver_agmax", 6);
+    agcon = param.getDefault<int>("linsolver_agcon", 15);
 
     if (symmetric)
       steps[1] = steps[0];
@@ -372,11 +384,8 @@ class ElasticityUpscale
                                    const std::string& rocklist);
 
     //! \brief Setup AMG preconditioner
-    //! \param[in] pre The number of pre-smoothing steps
-    //! \param[in] post The number of post-smoothing steps
-    //! \param[in] target The coarsening target
-    //! \param[in] zcells The wanted number of cells to collapse in z per level
-    void setupAMG(int pre, int post, int target, int zcells);
+    //! \param[in] params The linear solver params
+    void setupAMG(const LinSolParams& params);
 
     //! \brief Master grids
     std::vector<BoundaryGrid> master;

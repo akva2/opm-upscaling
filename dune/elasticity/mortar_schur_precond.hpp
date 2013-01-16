@@ -42,7 +42,7 @@ class MortarSchurPre : public Dune::Preconditioner<Vector,Vector> {
     };
 
     //! \brief Constructor
-    //! \param[in] P The multiplier block with diagonal A approximation
+    //! \param[in] P The multiplier block with some A approximation
     //! \param[in] B The mortar coupling matrix
     //! \param[in] Apre_ A preconfigured preconditioner for A
     //! \param[in] symmetric If true, use symmetric preconditioning

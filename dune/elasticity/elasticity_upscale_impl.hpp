@@ -675,9 +675,11 @@ void ElasticityUpscale<GridType>::loadMaterialsFromRocklist(const std::string& f
   std::vector<double> volume;
   volume.resize(cache.size());
   if (file == "uniform") {
+    // checkered
     for (int i=0;i<gv.size(0);++i)
-      materials.push_back(cache[0]);
-    volume[0] = 1;
+      materials.push_back(cache[i % cache.size()]);
+    for (size_t i=0; i < volume.size(); ++i)
+      volume[i] = 1.0/volume.size();
   } else {
     Opm::EclipseGridParser parser(file,false);
     std::vector<int> satnum = parser.getIntegerValue("SATNUM");
@@ -768,7 +770,7 @@ void ElasticityUpscale<GridType>::periodicBCsMortar(const double* min,
 
   // step 1
   fixCorners(min,max);
-  
+
   // step 2
   std::cout << "\textracting nodes on top face..." << std::endl;
   slave.push_back(extractFace(Z,max[2]));
@@ -825,19 +827,25 @@ void ElasticityUpscale<GridType>::periodicBCsMortar(const double* min,
 }
 
   template<class GridType>
-void ElasticityUpscale<GridType>::setupAMG(int pre, int post,
-                                           int target, int zcells)
+void ElasticityUpscale<GridType>::setupAMG(const LinSolParams& params)
 {
   Criterion crit;
   ElasticityAMG::SmootherArgs args;
   args.relaxationFactor = 1.0;
-  crit.setCoarsenTarget(target);
+  crit.setCoarsenTarget(params.coarsen_target);
   crit.setGamma(1);
-  crit.setNoPreSmoothSteps(pre);
-  crit.setNoPostSmoothSteps(post);
-  crit.setDefaultValuesIsotropic(3, zcells);
+  crit.setNoPreSmoothSteps(params.steps[0]);
+  crit.setNoPostSmoothSteps(params.steps[1]);
+  crit.setDefaultValuesAnisotropic(3, params.agdim);
+//  crit.setProlongationDampingFactor(1.33);
+//  crit.setBeta(1.e-5);
+  crit.setAlpha(0.51);
+  crit.setMinAggregateSize(params.agmin);
+  crit.setMaxAggregateSize(params.agmax);
+  crit.setMaxConnectivity(params.agcon);
 
-  std::cout << "\t collapsing 2x2x" << zcells << " cells per level" << std::endl;
+  std::cout << "\taggregate diameter " << params.agdim << std::endl;
+  std::cout << "\taggregate size " << params.agmin << "-" << params.agmax << std::endl;
   op = new Operator(A.getOperator());
   upre = new ElasticityAMG(*op, crit, args);
 
@@ -856,8 +864,7 @@ void ElasticityUpscale<GridType>::setupSolvers(const LinSolParams& params)
 {
   int siz = A.getOperator().N(); // system size
   if (params.type == ITERATIVE) {
-    setupAMG(params.steps[0], params.steps[1], params.coarsen_target,
-             params.zcells);
+    setupAMG(params);
 
     // Mortar in use
     if (B.N()) {
@@ -865,7 +872,7 @@ void ElasticityUpscale<GridType>::setupSolvers(const LinSolParams& params)
 
       // schur system: B'*diag(A)^-1*B
       if (params.mortarpre == SCHURAMG) {
-        Vector v, v2, v3;
+        Vector v, v2;
         v.resize(B.N());
         v2.resize(B.N());
         v = 0;
@@ -873,7 +880,7 @@ void ElasticityUpscale<GridType>::setupSolvers(const LinSolParams& params)
         Dune::DynamicMatrix<double> T(B.M(), B.M());
         upre->pre(v, v);
         std::cout << "\tBuilding preconditioner for multipliers..." << std::endl;
-        MortarBlockEvaluator<Dune::Preconditioner<Vector,Vector> > pre(*upre, B);
+        MortarBlockEvaluator<Dune::Preconditioner<Vector, Vector> > pre(*upre, B);
         LoggerHelper help(B.M(), 10, 100);
         for (size_t i=0; i < B.M(); ++i) {
           v[i] = 1;

@@ -261,3 +261,31 @@ Matrix MatrixOps::extractBlock(const Matrix& A, size_t r0, size_t N,
 
   return result;
 }
+
+Matrix MatrixOps::renumber(const Matrix& A, const std::vector<int>& map)
+{
+  // establish adjacency pattern
+  AdjacencyPattern adj;
+  adj.resize(A.M());
+  for (Matrix::ConstIterator it  = A.begin();
+                             it != A.end(); ++it) {
+    for (Matrix::ConstColIterator it2  = it->begin();
+                                  it2 != it->end(); ++it2) {
+      adj[map[it.index()]].insert(map[it2.index()]);
+    }
+  }
+
+  Matrix result;
+  fromAdjacency(result, adj, A.N(), A.M());
+
+  // now insert elements from A
+  for (Matrix::ConstIterator it  = A.begin();
+                             it != A.end(); ++it) {
+    for (Matrix::ConstColIterator it2  = it->begin();
+                                  it2 != it->end(); ++it2) {
+      result[map[it.index()]][map[it2.index()]] = *it2;
+    }
+  }
+
+  return result;
+}

@@ -59,7 +59,6 @@ class MortarBlockEvaluator : public Dune::LinearOperator<Vector, Vector> {
       Vector temp1(B.N());
       B.mv(x, temp1);
       Vector temp(temp1.size());
-      Dune::InverseOperatorResult res;
       temp = 0;
       op.apply(temp, temp1);
       B.usmtv(alpha, temp, y);
