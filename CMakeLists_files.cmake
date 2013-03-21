@@ -56,6 +56,7 @@ list (APPEND EXAMPLE_SOURCE_FILES
 	examples/upscale_cap.cpp
 	examples/upscale_cond.cpp
 	examples/upscale_elasticity.cpp
+	examples/solve_elasticity.cpp
 	examples/upscale_perm.cpp
 	examples/upscale_relperm.cpp
 	examples/upscale_relpermvisc.cpp

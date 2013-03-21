@@ -22,6 +22,7 @@
 #include <opm/core/utility/StopWatch.hpp>
 #include <opm/core/utility/parameters/ParameterGroup.hpp>
 #include <dune/grid/io/file/vtk/vtkwriter.hh>
+#include <dune/istl/matrixmarket.hh>
 
 #if HAVE_OPENMP
 #include <omp.h>
@@ -297,6 +298,7 @@ int main(int argc, char** argv)
     std::cout << "assembling elasticity operator..." << "\n";
     upscale.assemble(-1,true);
     std::cout << "setting up linear solver..." << std::endl;
+    Dune::storeMatrixMarket(upscale.A.getOperator(), "A.mm");
     upscale.setupSolvers(p.linsolver);
 
 //#pragma omp parallel for schedule(static)
@@ -305,6 +307,7 @@ int main(int argc, char** argv)
       std::cout << "\tassembling load vector..." << std::endl;
       upscale.assemble(i,false);
       std::cout << "\tsolving..." << std::endl;
+      Dune::storeMatrixMarket(upscale.b[i], "b.mm");
       upscale.solve(i);
       upscale.A.expandSolution(field[i],upscale.u[i]);
 #define CLAMP(x) (fabs(x)<1.e-4?0.0:x)
