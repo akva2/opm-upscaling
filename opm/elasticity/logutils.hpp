@@ -12,6 +12,8 @@
 #ifndef LOGUTILS_HPP_
 #define LOGUTILS_HPP_
 
+#include <omp.h>
+
 class LoggerHelper {
   public:
     LoggerHelper(int max_, int chunks, int minsize)
@@ -23,8 +25,9 @@ class LoggerHelper {
 
     void log(int it, const std::string& prefix)
     {
-      if (per_chunk > 0 && it > 0 && (it % per_chunk) == 0 && max-it > per_chunk)
-        std::cout << prefix << it  << '/' << max << std::endl;
+      if (omp_get_num_threads() == 1)
+        if (per_chunk > 0 && it > 0 && (it % per_chunk) == 0 && max-it > per_chunk)
+          std::cout << prefix << it  << '/' << max << std::endl;
     }
   protected:
     int per_chunk; //!< Will log for each per_chunk processed

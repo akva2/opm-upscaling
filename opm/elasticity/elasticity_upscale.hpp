@@ -37,6 +37,8 @@
 
 #include <dune/istl/paamg/amg.hh>
 
+#include <opm/elasticity/meshcolorizer.hpp>
+
 namespace Opm {
 namespace Elasticity {
 
@@ -158,16 +160,14 @@ class ElasticityUpscale
     ElasticityUpscale(const GridType& gv_, ctype tol_, ctype Escale_, 
                       const std::string& file, const std::string& rocklist,
                       bool verbose_)
-      :  A(gv_), gv(gv_), tol(tol_), Escale(Escale_), E(gv_), verbose(verbose_)
+      :  A(gv_), gv(gv_), tol(tol_), Escale(Escale_), E(gv_), verbose(verbose_),
+         color(gv_)
     {
       if (rocklist.empty())
         loadMaterialsFromGrid(file);
       else
         loadMaterialsFromRocklist(file,rocklist);
-      solver = 0;
       op = 0;
-      mpre = 0;
-      upre = 0;
       op2 = 0;
       meval = 0;
       lpre = 0;
@@ -185,13 +185,16 @@ class ElasticityUpscale
                                             it != itend; ++it)
         delete *it;
 
-      delete solver;
+      for (size_t i=0;i<tsolver.size();++i)
+        delete tsolver[i];
       delete op;
       delete op2;
       delete meval;
-      delete upre;
+      for (size_t i=0;i<upre.size();++i)
+        delete upre[i];
       delete lpre;
-      delete mpre;
+      for (size_t i=0;i<tmpre.size();++i)
+        delete tmpre[i];
     }
 
     //! \brief Find boundary coordinates
@@ -391,7 +394,7 @@ class ElasticityUpscale
     Matrix P; //!< Preconditioner for multiplier block
 
     //! \brief Linear solver
-    Dune::InverseOperator<Vector, Vector>* solver;
+    std::vector<Dune::InverseOperator<Vector, Vector>*> tsolver;
 
     //! \brief The smoother used in the AMG
     typedef Dune::SeqSSOR<Matrix, Vector, Vector> Smoother;
@@ -424,13 +427,13 @@ class ElasticityUpscale
     SchurEvaluator* op2;
 
     //! \brief The preconditioner for the elasticity operator
-    ElasticityAMG* upre;
+    std::vector<ElasticityAMG*> upre;
 
     //! \brief The preconditioner for the multiplier block (used with uzawa)
     SeqLU<Matrix, Vector, Vector>* lpre;
 
     //! \brief Preconditioner for the Mortar system
-    MortarSchurPre<ElasticityAMG>* mpre;
+    std::vector<MortarSchurPre<ElasticityAMG>*> tmpre;
 
     //! \brief Evaluator for the Mortar system
     MortarEvaluator* meval;
@@ -440,6 +443,9 @@ class ElasticityUpscale
 
     //! \brief Verbose output
     bool verbose;
+
+    //! \brief Mesh colorizer used with multithreaded assembly
+    MeshColorizer<GridType> color;
 };
 #include "elasticity_upscale_impl.hpp"
 

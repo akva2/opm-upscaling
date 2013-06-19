@@ -31,6 +31,7 @@ list (APPEND MAIN_SOURCE_FILES
 	opm/elasticity/fmatrixev_ext.cc
 	opm/elasticity/material.cpp
 	opm/elasticity/materials.cpp
+	opm/elasticity/meshcolorizer.cpp
 	opm/elasticity/mpc.cpp
 	)
 
@@ -72,7 +73,7 @@ list (APPEND EXAMPLE_SOURCE_FILES
 #	examples/upscale_relpermvisc.cpp
 #	examples/upscale_singlephase.cpp
 #	examples/upscale_steadystate_implicit.cpp
-#	tests/compare_upscaling_results.cpp
+	tests/compare_upscaling_results.cpp
 	)
 
 # programs listed here will not only be compiled, but also marked for

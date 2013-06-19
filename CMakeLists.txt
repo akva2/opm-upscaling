@@ -92,6 +92,10 @@ include (UsePrecompHeaders)
 # optimize full if we're not doing a debug build
 include (UseOptimization)
 
+include(UseOpenMP)
+
+find_openmp(${project})
+
 # turn on all warnings; this must be done before adding any
 # dependencies, in case they alter the list of warnings
 include (UseWarnings)

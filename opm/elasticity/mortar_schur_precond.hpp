@@ -49,7 +49,7 @@ class MortarSchurPre : public Dune::Preconditioner<Vector,Vector> {
     MortarSchurPre(const Matrix& P_, const Matrix& B_,
                    PrecondElasticityBlock& Apre_, bool symmetric_=false) :
       Apre(Apre_), B(B_), N(B.N()), M(B.M()),
-      Lpre(P_, false), symmetric(symmetric_)
+      Lpre(P_, false, false), symmetric(symmetric_)
     {
     }
 
@@ -75,24 +75,33 @@ class MortarSchurPre : public Dune::Preconditioner<Vector,Vector> {
     //! \param[in] d The vector to apply the preconditioner to
     virtual void apply(Vector& v, const Vector& d)
     {
-      // multiplier block (second row)
-      Vector temp;
-      MortarUtils::extractBlock(temp, d, M, N);
-      Dune::InverseOperatorResult r;
-      Vector temp2;
-      temp2.resize(temp.size(), false);
-      Lpre.apply(temp2, temp, r);
-      MortarUtils::injectBlock(v, temp2, M, N);
+#pragma omp parallel sections
+      {
+#pragma omp section
+        {
+          // multiplier block (second row)
+          Vector temp;
+          MortarUtils::extractBlock(temp, d, M, N);
+          Dune::InverseOperatorResult r;
+          Vector temp2;
+          temp2.resize(temp.size(), false);
+          Lpre.apply(temp2, temp, r);
+          MortarUtils::injectBlock(v, temp2, M, N);
+        }
+#pragma omp section
+        {
+          Vector temp, temp2;
+          // elasticity block (first row)
+          MortarUtils::extractBlock(temp, d, N);
+          if (!symmetric)
+            B.mmv(temp2, temp);
 
-      // elasticity block (first row)
-      MortarUtils::extractBlock(temp, d, N);
-      if (!symmetric)
-        B.mmv(temp2, temp);
-
-      temp2.resize(N, false);
-      temp2 = 0;
-      Apre.apply(temp2, temp);
-      MortarUtils::injectBlock(v, temp2, N);
+          temp2.resize(N, false);
+          temp2 = 0;
+          Apre.apply(temp2, temp);
+          MortarUtils::injectBlock(v, temp2, N);
+        }
+      }
     }
 
     //! \brief Dummy post-process function

@@ -439,73 +439,79 @@ void ElasticityUpscale<GridType>::assemble(int loadcase, bool matrix)
   const int comp = 3+(dim-2)*3;
   static const int bfunc = 4+(dim-2)*4;
 
-  const LeafIterator itend = gv.leafView().template end<0>();
-
-  Dune::FieldMatrix<ctype,comp,comp> C;
-  Dune::FieldMatrix<ctype,dim*bfunc,dim*bfunc> K;
-  Dune::FieldVector<ctype,dim*bfunc> ES;
-  Dune::FieldVector<ctype,dim*bfunc>* EP=0;
   Dune::FieldVector<ctype,comp> eps0;
   eps0 = 0;
   if (loadcase > -1) {
-    EP = &ES;
     eps0[loadcase] = 1;
     A.getLoadVector() = 0;
     b[loadcase] = 0;
   }
-  int m=0;
-  Dune::FieldMatrix<ctype,dim*bfunc,dim*bfunc>* KP=0;
-  if (matrix) {
-    KP = &K;
+  if (matrix)
     A.getOperator() = 0;
-  }
 
   LoggerHelper help(gv.size(0), 5, 50000);
-  for (LeafIterator it = gv.leafView().template begin<0>(); it != itend; ++it) {
-    materials[m++]->getConstitutiveMatrix(C);
-    // determine geometry type of the current element and get the matching reference element
-    Dune::GeometryType gt = it->type();
+  for (int i=0;i<2;++i) {
+#pragma omp parallel for schedule(static)
+    for (size_t j=0;j<color[i].size();++j) {
+      Dune::FieldMatrix<ctype,comp,comp> C;
+      Dune::FieldMatrix<ctype,dim*bfunc,dim*bfunc> K;
+      Dune::FieldMatrix<ctype,dim*bfunc,dim*bfunc>* KP=0;
+      Dune::FieldVector<ctype,dim*bfunc> ES;
+      Dune::FieldVector<ctype,dim*bfunc>* EP=0;
+      if (matrix)
+        KP = &K;
+      if (loadcase > -1)
+        EP = &ES;
 
-    Dune::FieldMatrix<ctype,dim*bfunc,dim*bfunc> Aq;
-    K = 0;
-    ES = 0;
+      for (size_t k=0;k<color[i][j].size();++k) {
+        LeafIterator it = gv.leafView().template begin<0>();
+        for (int l=0;l<color[i][j][k];++l)
+          ++it;
+        materials[color[i][j][k]]->getConstitutiveMatrix(C);
+        // determine geometry type of the current element and get the matching reference element
+        Dune::GeometryType gt = it->type();
 
-    // get a quadrature rule of order two for the given geometry type
-    const Dune::QuadratureRule<ctype,dim>& rule = Dune::QuadratureRules<ctype,dim>::rule(gt,2);
-    for (typename Dune::QuadratureRule<ctype,dim>::const_iterator r = rule.begin();
-        r != rule.end() ; ++r) {
-      // compute the jacobian inverse transposed to transform the gradients
-      Dune::FieldMatrix<ctype,dim,dim> jacInvTra =
-        it->geometry().jacobianInverseTransposed(r->position());
+        Dune::FieldMatrix<ctype,dim*bfunc,dim*bfunc> Aq;
+        K = 0;
+        ES = 0;
 
-      ctype detJ = it->geometry().integrationElement(r->position());
-      if (detJ <= 1.e-5 && verbose) {
-        std::cout << "cell " << m << " is (close to) degenerated, detJ " << detJ << std::endl;
-        double zdiff=0.0;
-        for (int i=0;i<4;++i)
-          zdiff = std::max(zdiff, it->geometry().corner(i+4)[2]-it->geometry().corner(i)[2]);
-        std::cout << "  - Consider setting ctol larger than " << zdiff << std::endl;
+        // get a quadrature rule of order two for the given geometry type
+        const Dune::QuadratureRule<ctype,dim>& rule = Dune::QuadratureRules<ctype,dim>::rule(gt,2);
+        for (typename Dune::QuadratureRule<ctype,dim>::const_iterator r = rule.begin();
+            r != rule.end() ; ++r) {
+          // compute the jacobian inverse transposed to transform the gradients
+          Dune::FieldMatrix<ctype,dim,dim> jacInvTra =
+            it->geometry().jacobianInverseTransposed(r->position());
+
+          ctype detJ = it->geometry().integrationElement(r->position());
+          if (detJ <= 1.e-5 && verbose) {
+            std::cout << "cell " << color[i][j][k] << " is (close to) degenerated, detJ " << detJ << std::endl;
+            double zdiff=0.0;
+            for (int i=0;i<4;++i)
+              zdiff = std::max(zdiff, it->geometry().corner(i+4)[2]-it->geometry().corner(i)[2]);
+            std::cout << "  - Consider setting ctol larger than " << zdiff << std::endl;
+          }
+
+          Dune::FieldMatrix<ctype,comp,dim*bfunc> B;
+          E.getBmatrix(B,r->position(),jacInvTra);
+
+          if (matrix) {
+            E.getStiffnessMatrix(Aq,B,C,detJ*r->weight());
+            K += Aq;
+          }
+
+          // load vector
+          if (EP) {
+            Dune::FieldVector<ctype,dim*bfunc> temp;
+            temp = Dune::FMatrixHelp::multTransposed(B,Dune::FMatrixHelp::mult(C,eps0));
+            temp *= -detJ*r->weight();
+            ES += temp;
+          }
+        }
+        A.addElement(KP,EP,it,(loadcase > -1)?&b[loadcase]:NULL);
       }
-
-      Dune::FieldMatrix<ctype,comp,dim*bfunc> B;
-      E.getBmatrix(B,r->position(),jacInvTra);
-
-      if (matrix) {
-        E.getStiffnessMatrix(Aq,B,C,detJ*r->weight());
-        K += Aq;
-      }
-
-      // load vector
-      if (EP) {
-        Dune::FieldVector<ctype,dim*bfunc> temp;
-        temp = Dune::FMatrixHelp::multTransposed(B,Dune::FMatrixHelp::mult(C,eps0));
-        temp *= -detJ*r->weight();
-        ES += temp;
-      }
+      help.log(j, "\t\t... still processing ... cell ");
     }
-
-    A.addElement(KP,EP,it,(loadcase > -1)?&b[loadcase]:NULL);
-    help.log(m, "\t\t... still processing ... cell ");
   }
 }
 
@@ -829,6 +835,8 @@ void ElasticityUpscale<GridType>::periodicBCsMortar(const double* min,
   slave.clear();
 }
 
+#include <omp.h>
+
   template<class GridType>
 void ElasticityUpscale<GridType>::setupAMG(int pre, int post,
                                            int target, int zcells)
@@ -844,22 +852,34 @@ void ElasticityUpscale<GridType>::setupAMG(int pre, int post,
 
   std::cout << "\t collapsing 2x2x" << zcells << " cells per level" << std::endl;
   op = new Operator(A.getOperator());
-  upre = new ElasticityAMG(*op, crit, args);
+  upre.push_back(new ElasticityAMG(*op, crit, args));
+}
 
-  /*
-  amg->addContext("Apre");
-  amg->setContext("Apre");
-  Vector x,y;
-  // this is done here to make sure we are in a single-threaded section
-  // will have to be redone when AMG is refactored upstream
-  amg->pre(x,y);
-  */
+ template<class M, class A>
+static void applyMortarBlock(int i, const Matrix& B, M& T,
+                             A& upre)
+{
+  Vector v, v2;
+  v.resize(B.N());
+  v2.resize(B.N());
+  v = 0;
+  v2 = 0;
+  MortarBlockEvaluator<Dune::Preconditioner<Vector,Vector> > pre(upre, B);
+  v[i] = 1;
+  pre.apply(v, v2);
+  for (size_t j=0; j < B.M(); ++j)
+    T[j][i] = v2[j];
 }
 
   template<class GridType>
 void ElasticityUpscale<GridType>::setupSolvers(const LinSolParams& params)
 {
   int siz = A.getOperator().N(); // system size
+  int numsolvers = 1;
+#if 1
+   numsolvers = omp_get_max_threads();
+#endif
+          
   if (params.type == ITERATIVE) {
     setupAMG(params.steps[0], params.steps[1], params.coarsen_target,
              params.zcells);
@@ -870,26 +890,21 @@ void ElasticityUpscale<GridType>::setupSolvers(const LinSolParams& params)
 
       // schur system: B'*diag(A)^-1*B
       if (params.mortarpre == SCHURAMG) {
-        Vector v, v2, v3;
-        v.resize(B.N());
-        v2.resize(B.N());
-        v = 0;
-        v2 = 0;
         Dune::DynamicMatrix<double> T(B.M(), B.M());
-        upre->pre(v, v);
         std::cout << "\tBuilding preconditioner for multipliers..." << std::endl;
-        MortarBlockEvaluator<Dune::Preconditioner<Vector,Vector> > pre(*upre, B);
         LoggerHelper help(B.M(), 10, 100);
-        for (size_t i=0; i < B.M(); ++i) {
-          v[i] = 1;
-          pre.apply(v, v2);
-          for (size_t j=0; j < B.M(); ++j)
-            T[j][i] = v2[j];
 
-          v[i] = 0;
+        std::vector<ElasticityAMG*> amg;
+        amg.resize(B.M());
+        for (size_t i=0;i<B.M();++i)
+          amg[i] = new ElasticityAMG(*upre[0]);
+#pragma omp parallel for schedule(static)
+        for (size_t i=0; i < B.M(); ++i) {
+          applyMortarBlock(i, B, T, *amg[i]);
           help.log(i, "\t\t... still processing ... multiplier ");
         }
-        upre->post(v);
+        for (size_t i=0;i<amg.size();++i)
+          delete amg[i];
         P = MatrixOps::fromDense(T);
       } else if (params.mortarpre == SCHURDIAG) {
         Matrix D = MatrixOps::diagonal(A.getEqns());
@@ -916,40 +931,50 @@ void ElasticityUpscale<GridType>::setupSolvers(const LinSolParams& params)
 
       if (params.uzawa) {
         Dune::CGSolver<Vector>* innersolver = 
-                new Dune::CGSolver<Vector>(*op, *upre, params.tol,
+                new Dune::CGSolver<Vector>(*op, *upre[0], params.tol,
                                            params.maxit, verbose?2:0);
         op2 = new SchurEvaluator(*innersolver, B);
         lpre = new SeqLU<Matrix, Vector, Vector>(P);
         Dune::CGSolver<Vector>* outersolver = 
                 new Dune::CGSolver<Vector>(*op2, *lpre, params.tol*10,
                                            params.maxit, verbose?2:0);
-        solver = new UzawaSolver<Vector, Vector>(innersolver, outersolver, B);
+        tsolver.push_back(new UzawaSolver<Vector, Vector>(innersolver, outersolver, B));
       } else {
-        mpre = new MortarSchurPre<ElasticityAMG>(P, B, *upre, params.symmetric);
+        for (int i=0;i<numsolvers;++i) {
+          if (i != 0)
+            upre.push_back(new ElasticityAMG(*upre[0]));
+          tmpre.push_back(new MortarSchurPre<ElasticityAMG>(P, B, *upre[i], params.symmetric));
+        }
         meval = new MortarEvaluator(A.getOperator(), B);
         if (params.symmetric) {
-          solver = new Dune::MINRESSolver<Vector>(*meval, *mpre, 
-                                                  params.tol, 
-                                                  params.maxit,
-                                                  verbose?2:0);
+          for (int i=0;i<numsolvers;++i)
+           tsolver.push_back(new Dune::MINRESSolver<Vector>(*meval, *tmpre[i], 
+                                                            params.tol, 
+                                                            params.maxit,
+                                                            verbose?2:0));
         } else {
-          solver = new Dune::RestartedGMResSolver<Vector>(*meval, *mpre, 
-                                                          params.tol,
-                                                          params.restart,
-                                                          params.maxit,
-                                                          verbose?2:0, true);
+          for (int i=0;i<numsolvers;++i)
+            tsolver.push_back(new Dune::RestartedGMResSolver<Vector>(*meval, *tmpre[i], 
+                                                            params.tol,
+                                                            params.restart,
+                                                            params.maxit,
+                                                            verbose?2:0, true));
         }
       }
     } else {
-      solver = new Dune::CGSolver<Vector>(*op, *upre, params.tol,
-                                          params.maxit, verbose?2:0);
+      for (int i=0;i<numsolvers;++i) {
+        if (i != 0)
+          upre.push_back(new ElasticityAMG(*upre[0]));
+        tsolver.push_back(new Dune::CGSolver<Vector>(*op, *upre[i], params.tol,
+                                                     params.maxit, verbose?2:0));
+      }
     }
   } else {
     if (B.N()) 
       A.getOperator() = MatrixOps::augment(A.getOperator(), B,
                                            0, A.getOperator().M(), true);
 #if HAVE_SUPERLU
-    solver = new Dune::SuperLU<Matrix>(A.getOperator(),verbose);
+    tsolver.push_back(new Dune::SuperLU<Matrix>(A.getOperator(),verbose));
 #else
     std::cerr << "SuperLU solver not enabled" << std::endl;
     exit(1);
@@ -969,7 +994,7 @@ void ElasticityUpscale<GridType>::solve(int loadcase)
     u[loadcase].resize(b[loadcase].size(), false);
     u[loadcase] = 0;
 
-    solver->apply(u[loadcase], b[loadcase], r);
+    tsolver[omp_get_thread_num()]->apply(u[loadcase], b[loadcase], r);
 
     std::cout << "\tsolution norm: " << u[loadcase].two_norm() << std::endl;
   } catch (Dune::ISTLError& e) {

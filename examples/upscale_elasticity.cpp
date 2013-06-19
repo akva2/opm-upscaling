@@ -106,6 +106,8 @@ struct Params {
   int cellsz;
   //! \brief verbose output
   bool verbose;
+  //! \brief Use the fast AMG
+  bool fastamg;
 };
 
 //! \brief Parse the command line arguments
@@ -132,8 +134,9 @@ void parseCommandLine(int argc, char** argv, Params& p)
   p.file     = param.get<std::string>("gridfilename");
   p.rocklist = param.getDefault<std::string>("rock_list","");
   p.vtufile  = param.getDefault<std::string>("vtufilename","");
-  p.output = param.getDefault<std::string>("output","");
-  p.verbose = param.getDefault<bool>("verbose",false);
+  p.output   = param.getDefault<std::string>("output","");
+  p.verbose  = param.getDefault<bool>("verbose",false);
+  p.fastamg  = param.getDefault<bool>("fastamg",false);
   size_t i;
   if ((i=p.vtufile.find(".vtu")) != std::string::npos)
     p.vtufile = p.vtufile.substr(0,i);
@@ -213,23 +216,13 @@ void writeOutput(const Params& p, Opm::time::StopWatch& watch, int cells,
     << C << std::endl;
 }
 
-//! \brief Main driver
-int main(int argc, char** argv)
+//! \brief Main solution loop. Allows templating over the AMG type
+  template<class GridType, template<class,class,class,class,class> class AMG>
+int run(Params& p)
 {
+  static const int dim = 3;
+
   try {
-    static const int dim = 3;
-
-    typedef Dune::CpGrid GridType;
-
-    if (argc < 2 || strcmp(argv[1],"-h") == 0 
-                 || strcmp(argv[1],"--help") == 0
-                 || strcmp(argv[1],"-?") == 0) {
-      syntax(argv);
-      exit(1);
-    }
-    Params p;
-    parseCommandLine(argc,argv,p);
-
     Opm::time::StopWatch watch;
     watch.start();
 
@@ -290,16 +283,20 @@ int main(int argc, char** argv)
       upscale.A.initForAssembly();
     }
     Dune::FieldMatrix<double,6,6> C;
-    Dune::VTKWriter<GridType::LeafGridView>* vtkwriter=0;
-    if (!p.vtufile.empty())
-      vtkwriter = new Dune::VTKWriter<GridType::LeafGridView>(grid.leafView());
     Opm::Elasticity::Vector field[6];
     std::cout << "assembling elasticity operator..." << "\n";
     upscale.assemble(-1,true);
     std::cout << "setting up linear solver..." << std::endl;
     upscale.setupSolvers(p.linsolver);
 
-//#pragma omp parallel for schedule(static)
+    // the uzawa solver cannot run multithreaded
+#if 1
+    if (p.linsolver.uzawa || p.linsolver.type == Opm::Elasticity::DIRECT) {
+      std::cout << "WARNING: disabling multi-threaded solves due to uzawa" << std::endl;
+      omp_set_num_threads(1);
+#endif
+    }
+#pragma omp parallel for schedule(static)
     for (int i=0;i<6;++i) {
       std::cout << "processing case " << i+1 << "..." << std::endl;
       std::cout << "\tassembling load vector..." << std::endl;
@@ -317,16 +314,18 @@ int main(int argc, char** argv)
       for (int j=0;j<6;++j)
         C[i][j] = CLAMP(v[j]);
     }
-    for (int i=0;i<6;++i) {
-      std::stringstream str;
-      str << "sol " << i+1;
-      if (vtkwriter)
-        vtkwriter->addVertexData(field[i], str.str().c_str(), dim);
+
+    if (!p.vtufile.empty()) {
+      Dune::VTKWriter<typename GridType::LeafGridView> vtkwriter(grid.leafView());
+
+      for (int i=0;i<6;++i) {
+        std::stringstream str;
+        str << "sol " << i+1;
+        vtkwriter.addVertexData(field[i], str.str().c_str(), dim);
+      }
+      vtkwriter.write(p.vtufile);
     }
-    if (vtkwriter) {
-      vtkwriter->write(p.vtufile);
-      delete vtkwriter;
-    }
+
     // voigt notation
     for (int j=0;j<6;++j)
       std::swap(C[3][j],C[5][j]);
@@ -334,9 +333,8 @@ int main(int argc, char** argv)
       std::swap(C[j][3],C[j][5]);
     std::cout << "---------" << std::endl;
     std::cout << C << std::endl;
-    if (!p.output.empty()) {
+    if (!p.output.empty())
       writeOutput(p,watch,grid.size(0),upscale.volumeFractions,C);
-    }
 
     return 0;
   }
@@ -346,5 +344,25 @@ int main(int argc, char** argv)
   catch (...) {
     std::cerr << "Unknown exception thrown!" << std::endl;
   }
+
   return 1;
+}
+
+//! \brief Main driver
+int main(int argc, char** argv)
+{
+  if (argc < 2 || strcmp(argv[1],"-h") == 0 
+               || strcmp(argv[1],"--help") == 0
+               || strcmp(argv[1],"-?") == 0) {
+    syntax(argv);
+    exit(1);
+  }
+
+  Params p;
+  parseCommandLine(argc,argv,p);
+
+  if (p.fastamg)
+    return run<Dune::CpGrid, Dune::Amg::FastAMG>(p);
+  else
+    return run<Dune::CpGrid, Dune::Amg::AMG>(p);
 }

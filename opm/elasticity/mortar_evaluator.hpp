@@ -46,13 +46,22 @@ class MortarEvaluator : public Dune::LinearOperator<Vector, Vector> {
     void apply(const Vector& x, Vector& y) const
     {
       Vector lambda, l2;
-
       MortarUtils::extractBlock(lambda, x, B.M(), A.N());
-      A.mv(x, y);
-      B.umv(lambda, y);
-      l2.resize(lambda.size());
-      B.mtv(x, l2);
-      MortarUtils::injectBlock(y, l2, B.M(), A.N());
+
+#pragma omp parallel sections
+     {
+#pragma omp section
+        {
+          A.mv(x, y);
+          B.umv(lambda, y);
+        }
+#pragma omp section
+        {
+          l2.resize(lambda.size());
+          B.mtv(x, l2);
+          MortarUtils::injectBlock(y, l2, B.M(), A.N());
+        }
+      }
     }
 
     //! \brief Apply the multiplier block with an embedded axpy
@@ -62,14 +71,22 @@ class MortarEvaluator : public Dune::LinearOperator<Vector, Vector> {
     void applyscaleadd(field_type alpha, const Vector& x, Vector& y) const
     {
       Vector lambda, l2;
-
-      A.usmv(alpha, x, y);
       MortarUtils::extractBlock(lambda, x, B.M(), A.N());
-      B.umv(lambda, y);
-      l2.resize(lambda.size());
-      B.mtv(x, l2);
-      for (size_t i=A.N(); i < y.size(); ++i)
-        y[i] += alpha*l2[i-A.N()];
+#pragma omp parallel sections
+      {
+#pragma omp section 
+        {
+          A.usmv(alpha, x, y);
+          B.umv(lambda, y);
+        }
+#pragma omp section
+        {
+          l2.resize(lambda.size());
+          B.mtv(x, l2);
+          for (size_t i=A.N(); i < y.size(); ++i)
+            y[i] += alpha*l2[i-A.N()];
+        }
+      }
     }
   protected:
     const Matrix& A; //!< Reference to A matrix
