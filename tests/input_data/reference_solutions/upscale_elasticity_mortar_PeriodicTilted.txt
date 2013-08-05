@@ -1,0 +1,28 @@
+######################################################################
+# Results from upscaling elastic moduli.
+#
+# Finished: Mon Aug  5 17:00:11 2013
+# Hostname: SINTEFPC4169
+#
+# Upscaling time: 44.9124 secs
+#
+# Eclipse file: /home/akva/kode/opm-new/rg/opm-upscaling/src/opm-upscaling-build/tests/input_data/grids/PeriodicTilted.grdecl
+#	 cells: 3760
+#
+# Options used:
+#	         method: mortar
+#	 linsolver_type: iterative
+#	           ltol: 1e-08
+#
+# Materials: 2
+#	 Material1: 50.0004%
+#	 Material2: 49.9996%
+#
+######################################################################
+547.392 269.273 196.663 0 -139.941 0
+269.273 702.679 164.973 0 -69.0338 0
+196.663 164.973 275.051 0 -40.4145 0
+0 0 0 95.4375 0 -51.8116
+-139.941 -69.0338 -40.4145 0 135.845 0
+0 0 0 -51.8116 0 173.714
+

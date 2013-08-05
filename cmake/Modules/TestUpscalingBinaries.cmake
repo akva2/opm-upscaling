@@ -62,9 +62,41 @@ macro (add_test_upscale_perm gridname bcs rows)
                        run_upscale_perm_BC${bcs}_${gridname})
 endmacro (add_test_upscale_perm gridname bcs)
 
+###########################################################################
+# TEST: upscale_elasticity
+###########################################################################
+
+# Define macro that performs the two steps mentioned above for upscale_elasticity
+# Input: 
+#   - gridname: basename (no extension) of grid model
+#   - method: method to apply
+# This macro assumes that ${gridname}.grdecl is found in directory ${INPUT_DATA_PATH}grids/
+# and that upscale_elasticity_${method}_${gridname}.txt is found in ${INPUT_DATA_PATH}reference_solutions
+macro (add_test_upscale_elasticity gridname method)
+  # Add test that runs upscale_perm and outputs the results to file
+  add_test(run_upscale_elasticity_${method}_${gridname}
+           ${PROJECT_BINARY_DIR}/bin/upscale_elasticity
+           output=${RESULT_PATH}upscale_elasticity_${method}_${gridname}.txt
+           gridfilename=${INPUT_DATA_PATH}grids/${gridname}.grdecl
+           method=${method})
+  # Add test that compare the results from the previous test with a reference solution
+  add_test(compare_upscale_elasticity_${method}_${gridname}
+           ${PROJECT_BINARY_DIR}/bin/compare_upscaling_results
+           ${INPUT_DATA_PATH}reference_solutions/upscale_elasticity_${method}_${gridname}.txt
+           ${RESULT_PATH}upscale_elasticity_${method}_${gridname}.txt
+           ${tol}
+           6 6)
+  # Set dependency of the two tests
+  set_tests_properties(compare_upscale_elasticity_${method}_${gridname} PROPERTIES DEPENDS
+                       run_upscale_elasticity_${method}_${gridname})
+endmacro (add_test_upscale_elasticity gridname method rows)
+
 # Add tests for different models
 add_test_upscale_perm(PeriodicTilted p 3)
 add_test_upscale_perm(27cellsAniso flp 9)
 add_test_upscale_perm(27cellsIso flp 9)
 add_test_upscale_perm(EightCells fl 6)
 add_test_upscale_perm(Hummocky flp 9)
+
+add_test_upscale_elasticity(PeriodicTilted mpc)
+add_test_upscale_elasticity(PeriodicTilted mortar)

@@ -53,6 +53,8 @@ list (APPEND TEST_DATA_FILES
   tests/input_data/reference_solutions/upscale_perm_BCflp_27cellsIso.txt 
   tests/input_data/reference_solutions/upscale_perm_BCfl_EightCells.txt 
   tests/input_data/reference_solutions/upscale_perm_BCflp_Hummocky.txt 
+  tests/input_data/reference_solutions/upscale_elasticity_mpc_PeriodicTilted.txt
+  tests/input_data/reference_solutions/upscale_elasticity_mortar_PeriodicTilted.txt
 	)
 
 # originally generated with the command:
