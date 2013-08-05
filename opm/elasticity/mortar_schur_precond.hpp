@@ -75,33 +75,24 @@ class MortarSchurPre : public Dune::Preconditioner<Vector,Vector> {
     //! \param[in] d The vector to apply the preconditioner to
     virtual void apply(Vector& v, const Vector& d)
     {
-#pragma omp parallel sections
-      {
-#pragma omp section
-        {
-          // multiplier block (second row)
-          Vector temp;
-          MortarUtils::extractBlock(temp, d, M, N);
-          Dune::InverseOperatorResult r;
-          Vector temp2;
-          temp2.resize(temp.size(), false);
-          Lpre.apply(temp2, temp, r);
-          MortarUtils::injectBlock(v, temp2, M, N);
-        }
-#pragma omp section
-        {
-          Vector temp, temp2;
-          // elasticity block (first row)
-          MortarUtils::extractBlock(temp, d, N);
-          if (!symmetric)
-            B.mmv(temp2, temp);
+      // multiplier block (second row)
+      Vector temp;
+      MortarUtils::extractBlock(temp, d, M, N);
+      Dune::InverseOperatorResult r;
+      Vector temp2;
+      temp2.resize(temp.size(), false);
+      Lpre.apply(temp2, temp, r);
+      MortarUtils::injectBlock(v, temp2, M, N);
 
-          temp2.resize(N, false);
-          temp2 = 0;
-          Apre.apply(temp2, temp);
-          MortarUtils::injectBlock(v, temp2, N);
-        }
-      }
+      // elasticity block (first row)
+      MortarUtils::extractBlock(temp, d, N);
+      if (!symmetric)
+        B.mmv(temp2, temp);
+
+      temp2.resize(N, false);
+      temp2 = 0;
+      Apre.apply(temp2, temp);
+      MortarUtils::injectBlock(v, temp2, N);
     }
 
     //! \brief Dummy post-process function

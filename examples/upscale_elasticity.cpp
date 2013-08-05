@@ -217,7 +217,7 @@ void writeOutput(const Params& p, Opm::time::StopWatch& watch, int cells,
 }
 
 //! \brief Main solution loop. Allows templating over the AMG type
-  template<class GridType, template<class,class,class,class,class> class AMG>
+  template<class GridType, class AMG>
 int run(Params& p)
 {
   static const int dim = 3;
@@ -238,11 +238,11 @@ int run(Params& p)
     } else
       grid.readEclipseFormat(p.file,p.ctol,false);
 
-    typedef GridType::ctype ctype;
-    Opm::Elasticity::ElasticityUpscale<GridType> upscale(grid, p.ctol, 
-                                                         p.Emin, p.file,
-                                                         p.rocklist,
-                                                         p.verbose);
+    typedef typename GridType::ctype ctype;
+    Opm::Elasticity::ElasticityUpscale<GridType, AMG> upscale(grid, p.ctol, 
+                                                              p.Emin, p.file,
+                                                              p.rocklist,
+                                                              p.verbose);
     if (p.max[0] < 0 || p.min[0] < 0) {
       std::cout << "determine side coordinates..." << std::endl;
       upscale.findBoundaries(p.min,p.max);
@@ -362,7 +362,7 @@ int main(int argc, char** argv)
   parseCommandLine(argc,argv,p);
 
   if (p.fastamg)
-    return run<Dune::CpGrid, Dune::Amg::FastAMG>(p);
+    return run<Dune::CpGrid, Opm::Elasticity::FastAMG>(p);
   else
-    return run<Dune::CpGrid, Dune::Amg::AMG>(p);
+    return run<Dune::CpGrid, Opm::Elasticity::AMG>(p);
 }
