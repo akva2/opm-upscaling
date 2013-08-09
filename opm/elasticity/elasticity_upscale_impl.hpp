@@ -684,9 +684,16 @@ void ElasticityUpscale<GridType, EAMG>::loadMaterialsFromRocklist(const std::str
   std::vector<double> volume;
   volume.resize(cache.size());
   if (file == "uniform") {
-    for (int i=0;i<gv.size(0);++i)
-      materials.push_back(cache[0]);
-    volume[0] = 1;
+    if (cache.size() == 1) {
+      for (int i=0;i<gv.size(0);++i)
+        materials.push_back(cache[0]);
+      volume[0] = 1;
+    } else { // checker-board 2 materials
+      for (int i=0;i<gv.size(0);++i) {
+        materials.push_back(cache[i%2]);
+        volume[i%2] += gv.cellVolume(i);
+      }
+    }
   } else {
     Opm::EclipseGridParser parser(file,false);
     std::vector<int> satnum = parser.getIntegerValue("SATNUM");
