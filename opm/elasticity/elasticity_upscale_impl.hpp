@@ -572,7 +572,8 @@ void ElasticityUpscale<GridType, EAMG>::averageStress(Dune::FieldVector<ctype,co
   template<class GridType, class EAMG>
 void ElasticityUpscale<GridType, EAMG>::loadMaterialsFromGrid(const std::string& file)
 {
-  typedef std::map<std::pair<double,double>, Material*> MaterialMap;
+  typedef std::map<std::pair<double,double>,
+                   std::shared_ptr<Material> > MaterialMap;
   MaterialMap cache;
   std::vector<double> Emod;
   std::vector<double> Poiss;
@@ -633,14 +634,14 @@ void ElasticityUpscale<GridType, EAMG>::loadMaterialsFromGrid(const std::string&
     if ((it = cache.find(std::make_pair(Emod[k],Poiss[k]))) != cache.end())
     {
       assert(gv.cellVolume(i) > 0);
-      volume[it->second] += gv.cellVolume(i);
+      volume[it->second.get()] += gv.cellVolume(i);
       materials.push_back(it->second);
     }
     else {
-      Material* mat = new Isotropic(j++,Emod[k],Poiss[k]);
+      std::shared_ptr<Material> mat(new Isotropic(j++,Emod[k],Poiss[k]));
       cache.insert(std::make_pair(std::make_pair(Emod[k],Poiss[k]),mat));
       assert(gv.cellVolume(i) > 0);
-      volume.insert(std::make_pair(mat,gv.cellVolume(i)));
+      volume.insert(std::make_pair(mat.get(),gv.cellVolume(i)));
       materials.push_back(mat);
     }
   }
@@ -653,8 +654,8 @@ void ElasticityUpscale<GridType, EAMG>::loadMaterialsFromGrid(const std::string&
 
   int i=0;
   for (MaterialMap::iterator it = cache.begin(); it != cache.end(); ++it, ++i) {
-    std::cout << "  Material" << i+1 << ": " << 100.f*volume[it->second]/totalvolume << '%' << std::endl;
-    volumeFractions.push_back(volume[it->second]/totalvolume);
+    std::cout << "  Material" << i+1 << ": " << 100.f*volume[it->second.get()]/totalvolume << '%' << std::endl;
+    volumeFractions.push_back(volume[it->second.get()]/totalvolume);
   }
 }
 
@@ -662,7 +663,7 @@ void ElasticityUpscale<GridType, EAMG>::loadMaterialsFromGrid(const std::string&
 void ElasticityUpscale<GridType, EAMG>::loadMaterialsFromRocklist(const std::string& file,
                                                                  const std::string& rocklist)
 {
-  std::vector<Material*> cache;
+  std::vector< std::shared_ptr<Material> > cache;
   // parse the rocklist
   std::ifstream f;
   f.open(rocklist.c_str());
@@ -671,17 +672,17 @@ void ElasticityUpscale<GridType, EAMG>::loadMaterialsFromRocklist(const std::str
   for (int i=0;i<mats;++i) {
     std::string file;
     f >> file;
-    cache.push_back(Material::create(i+1,file));
+    cache.push_back(std::shared_ptr<Material>(Material::create(i+1,file)));
   }
 
   // scale E modulus of materials
   if (Escale > 0) {
     Emin=1e10;
     for (size_t i=0;i<cache.size();++i)
-      Emin = std::min(Emin,((Isotropic*)cache[i])->getE());
+      Emin = std::min(Emin,((Isotropic*)cache[i].get())->getE());
     for (size_t i=0;i<cache.size();++i) {
-      double E = ((Isotropic*)cache[i])->getE();
-      ((Isotropic*)cache[i])->setE(E*Escale/Emin);
+      double E = ((Isotropic*)cache[i].get())->getE();
+      ((Isotropic*)cache[i].get())->setE(E*Escale/Emin);
     }
   }
   std::vector<double> volume;
@@ -691,10 +692,10 @@ void ElasticityUpscale<GridType, EAMG>::loadMaterialsFromRocklist(const std::str
       for (int i=0;i<gv.size(0);++i)
         materials.push_back(cache[0]);
       volume[0] = 1;
-    } else { // checker-board 2 materials
+    } else {
       for (int i=0;i<gv.size(0);++i) {
-        materials.push_back(cache[i%2]);
-        volume[i%2] += gv.cellVolume(i);
+        materials.push_back(cache[i % cache.size()]);
+        volume[i % cache.size()] += gv.cellVolume(i);
       }
     }
   } else {
@@ -847,7 +848,7 @@ void ElasticityUpscale<GridType, EAMG>::periodicBCsMortar(const double* min,
 
   template<class EAMG>
 EAMG* setupAMG(int pre, int post, int target, int zcells,
-               Operator* op)
+               std::shared_ptr<Operator>& op)
 {
   Criterion crit;
   typename EAMG::SmootherArgs args;
@@ -864,7 +865,7 @@ EAMG* setupAMG(int pre, int post, int target, int zcells,
 
   template<>
 FastAMG* setupAMG<FastAMG>(int pre, int post, int target, int zcells,
-                           Operator* op)
+                           std::shared_ptr<Operator>& op)
 {
   Criterion crit;
   crit.setCoarsenTarget(target);
@@ -901,9 +902,11 @@ void ElasticityUpscale<GridType, EAMG>::setupSolvers(const LinSolParams& params)
 #endif
           
   if (params.type == ITERATIVE) {
-    op = new Operator(A.getOperator());
-    upre.push_back(setupAMG<EAMG>(params.steps[0], params.steps[1],
-                                  params.coarsen_target, params.zcells, op));
+    op.reset(new Operator(A.getOperator()));
+    upre.push_back(std::shared_ptr<EAMG>(setupAMG<EAMG>(params.steps[0],
+                                                         params.steps[1],
+                                                         params.coarsen_target,
+                                                         params.zcells, op)));
 
     // Mortar in use
     if (B.N()) {
@@ -915,17 +918,15 @@ void ElasticityUpscale<GridType, EAMG>::setupSolvers(const LinSolParams& params)
         std::cout << "\tBuilding preconditioner for multipliers..." << std::endl;
         LoggerHelper help(B.M(), 10, 100);
 
-        std::vector<EAMG*> amg;
+        std::vector< std::shared_ptr<EAMG> > amg;
         amg.resize(B.M());
         for (size_t i=0;i<B.M();++i)
-          amg[i] = new EAMG(*upre[0]);
+          amg[i].reset(new EAMG(*upre[0]));
 #pragma omp parallel for schedule(static)
         for (size_t i=0; i < B.M(); ++i) {
           applyMortarBlock(i, B, T, *amg[i]);
           help.log(i, "\t\t... still processing ... multiplier ");
         }
-        for (size_t i=0;i<amg.size();++i)
-          delete amg[i];
         P = MatrixOps::fromDense(T);
       } else if (params.mortarpre == SCHURDIAG) {
         Matrix D = MatrixOps::diagonal(A.getEqns());
@@ -954,41 +955,45 @@ void ElasticityUpscale<GridType, EAMG>::setupSolvers(const LinSolParams& params)
         Dune::CGSolver<Vector>* innersolver = 
                 new Dune::CGSolver<Vector>(*op, *upre[0], params.tol,
                                            params.maxit, verbose?2:0);
-        op2 = new SchurEvaluator(*innersolver, B);
-        lprep = new Dune::SuperLU<Matrix>(P);
-        lpre = new SeqLU(*lprep);
+        op2.reset(new SchurEvaluator(*innersolver, B));
+        lprep.reset(new Dune::SuperLU<Matrix>(P));
+        lpre.reset(new SeqLU(*lprep));
         Dune::CGSolver<Vector>* outersolver = 
                 new Dune::CGSolver<Vector>(*op2, *lpre, params.tol*10,
                                            params.maxit, verbose?2:0);
-        tsolver.push_back(new UzawaSolver<Vector, Vector>(innersolver, outersolver, B));
+        tsolver.push_back(SolverPtr(new UzawaSolver<Vector, Vector>(innersolver, outersolver, B)));
       } else {
         for (int i=0;i<numsolvers;++i) {
           if (i != 0)
-            upre.push_back(new EAMG(*upre[0]));
-          tmpre.push_back(new MortarSchurPre<EAMG>(P, B, *upre[i], params.symmetric));
+            upre.push_back(std::shared_ptr<EAMG>(new EAMG(*upre[0])));
+          tmpre.push_back(MortarAmgPtr(new MortarSchurPre<EAMG>(P, B, 
+                                                                *upre[i],
+                                                            params.symmetric)));
         }
-        meval = new MortarEvaluator(A.getOperator(), B);
+        meval.reset(new MortarEvaluator(A.getOperator(), B));
         if (params.symmetric) {
           for (int i=0;i<numsolvers;++i)
-           tsolver.push_back(new Dune::MINRESSolver<Vector>(*meval, *tmpre[i], 
-                                                            params.tol, 
-                                                            params.maxit,
-                                                            verbose?2:0));
+           tsolver.push_back(SolverPtr(new Dune::MINRESSolver<Vector>(*meval, *tmpre[i], 
+                                                                      params.tol, 
+                                                                      params.maxit,
+                                                                      verbose?2:0)));
         } else {
           for (int i=0;i<numsolvers;++i)
-            tsolver.push_back(new Dune::RestartedGMResSolver<Vector>(*meval, *tmpre[i], 
-                                                            params.tol,
-                                                            params.restart,
-                                                            params.maxit,
-                                                            verbose?2:0, true));
+            tsolver.push_back(SolverPtr(new Dune::RestartedGMResSolver<Vector>(*meval, *tmpre[i], 
+                                                                               params.tol,
+                                                                               params.restart,
+                                                                               params.maxit,
+                                                                               verbose?2:0, true)));
         }
       }
     } else {
       for (int i=0;i<numsolvers;++i) {
         if (i != 0)
-          upre.push_back(new EAMG(*upre[0]));
-        tsolver.push_back(new Dune::CGSolver<Vector>(*op, *upre[i], params.tol,
-                                                     params.maxit, verbose?2:0));
+          upre.push_back(std::shared_ptr<EAMG>(new EAMG(*upre[0])));
+        tsolver.push_back(SolverPtr(new Dune::CGSolver<Vector>(*op, *upre[i],
+                                                               params.tol,
+                                                               params.maxit,
+                                                               verbose?2:0)));
       }
     }
   } else {
@@ -996,7 +1001,8 @@ void ElasticityUpscale<GridType, EAMG>::setupSolvers(const LinSolParams& params)
       A.getOperator() = MatrixOps::augment(A.getOperator(), B,
                                            0, A.getOperator().M(), true);
 #if HAVE_SUPERLU
-    tsolver.push_back(new Dune::SuperLU<Matrix>(A.getOperator(),verbose));
+    tsolver.push_back(SolverPtr(new Dune::SuperLU<Matrix>(A.getOperator(),
+                                                          verbose)));
 #else
     std::cerr << "SuperLU solver not enabled" << std::endl;
     exit(1);

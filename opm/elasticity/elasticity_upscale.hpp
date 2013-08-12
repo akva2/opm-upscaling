@@ -178,7 +178,8 @@ typedef Dune::Amg::FastAMG<Operator, Vector> FastAMG;
 //! \param[in] zcells The wanted number of cells to collapse in z per level
 //! \param[in] op The linear operator
   template<class EAMG>
-EAMG* setupAMG(int pre, int post, int target, int zcells, Operator* op);
+EAMG* setupAMG(int pre, int post, int target, int zcells,
+               std::shared_ptr<Operator>& op);
 
 //! \brief The main driver class
   template<class GridType, class EAMG>
@@ -231,36 +232,6 @@ class ElasticityUpscale
         loadMaterialsFromGrid(file);
       else
         loadMaterialsFromRocklist(file,rocklist);
-      op = 0;
-      op2 = 0;
-      meval = 0;
-      lpre = 0;
-      lprep = 0;
-    }
-
-    //! \brief The destructor
-    ~ElasticityUpscale()
-    {
-      // sort the pointers so unique can do its job
-      std::sort(materials.begin(),materials.end());
-      // this reorders the vector so we only get one entry per pointer
-      std::vector<Material*>::iterator itend = std::unique(materials.begin(),materials.end());
-      // now delete the pointers
-      for (std::vector<Material*>::iterator it  = materials.begin();
-                                            it != itend; ++it)
-        delete *it;
-
-      for (size_t i=0;i<tsolver.size();++i)
-        delete tsolver[i];
-      delete op;
-      delete op2;
-      delete meval;
-      for (size_t i=0;i<upre.size();++i)
-        delete upre[i];
-      delete lpre;
-      delete lprep;
-      for (size_t i=0;i<tmpre.size();++i)
-        delete tmpre[i];
     }
 
     //! \brief Find boundary coordinates
@@ -351,7 +322,7 @@ class ElasticityUpscale
     bool isOnPoint(GlobalCoordinate coord, GlobalCoordinate point);
 
     //! \brief Vector holding material parameters for each active grid cell
-    std::vector<Material*> materials;
+    std::vector< std::shared_ptr<Material> > materials;
 
     //! \brief Extract the vertices on a given face
     //! \param[in] dir The direction of the face normal
@@ -453,10 +424,11 @@ class ElasticityUpscale
     Matrix P; //!< Preconditioner for multiplier block
 
     //! \brief Linear solver
-    std::vector<Dune::InverseOperator<Vector, Vector>*> tsolver;
+    typedef std::shared_ptr<Dune::InverseOperator<Vector, Vector> > SolverPtr;
+    std::vector<SolverPtr> tsolver;
 
     //! \brief Matrix adaptor for the elasticity block
-    Operator* op;
+    std::shared_ptr<Operator> op;
 
     //! \brief Preconditioner for multiplier block
     typedef MortarBlockEvaluator<Dune::Preconditioner<Vector, Vector> > SchurPreconditioner;
@@ -465,23 +437,24 @@ class ElasticityUpscale
     typedef MortarBlockEvaluator<Dune::InverseOperator<Vector, Vector> > SchurEvaluator;
 
     //! \brief Outer evaluator, used with uzawa
-    SchurEvaluator* op2;
+    std::shared_ptr<SchurEvaluator> op2;
 
     //! \brief The preconditioner for the elasticity operator
-    std::vector<EAMG*> upre;
+    std::vector< std::shared_ptr<EAMG> > upre;
 
     //! \brief An LU solve as a preconditioner
     typedef Dune::InverseOperator2Preconditioner<Dune::SuperLU<Matrix>,
                                         Dune::SolverCategory::sequential> SeqLU;
     //! \brief The preconditioner for the multiplier block (used with uzawa)
-    SeqLU* lpre;
-    Dune::SuperLU<Matrix>* lprep;
+    std::shared_ptr<SeqLU> lpre;
+    std::shared_ptr< Dune::SuperLU<Matrix> > lprep;
 
     //! \brief Preconditioner for the Mortar system
-    std::vector<MortarSchurPre<EAMG>*> tmpre;
+    typedef std::shared_ptr< MortarSchurPre<EAMG> > MortarAmgPtr;
+    std::vector<MortarAmgPtr> tmpre;
 
     //! \brief Evaluator for the Mortar system
-    MortarEvaluator* meval;
+    std::shared_ptr<MortarEvaluator> meval;
 
     //! \brief Elasticity helper class
     Elasticity<GridType> E;
