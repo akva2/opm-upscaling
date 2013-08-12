@@ -350,6 +350,15 @@ int run(Params& p)
   return 1;
 }
 
+  template<class Smoother>
+int runAMG(Params& p)
+{
+  return run<Dune::CpGrid,
+             Dune::Amg::AMG<Opm::Elasticity::Operator,
+                            Opm::Elasticity::Vector,
+                            Smoother> >(p);
+}
+
 //! \brief Main driver
 int main(int argc, char** argv)
 {
@@ -365,6 +374,14 @@ int main(int argc, char** argv)
 
   if (p.linsolver.fastamg)
     return run<Dune::CpGrid, Opm::Elasticity::FastAMG>(p);
-  else
-    return run<Dune::CpGrid, Opm::Elasticity::AMG>(p);
+  else {
+    if (p.linsolver.smoother == Opm::Elasticity::SMOOTH_SCHWARZ)
+      return runAMG<Opm::Elasticity::SchwarzSmoother>(p);
+    else if (p.linsolver.smoother == Opm::Elasticity::SMOOTH_JACOBI)
+      return runAMG<Opm::Elasticity::JACSmoother>(p);
+    else if (p.linsolver.smoother == Opm::Elasticity::SMOOTH_ILU)
+      return runAMG<Opm::Elasticity::ILUSmoother>(p);
+    else
+      return runAMG<Opm::Elasticity::SSORSmoother>(p);
+  }
 }
