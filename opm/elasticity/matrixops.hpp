@@ -13,6 +13,7 @@
 #define MATRIXOPS_HPP_
 
 #include <dune/istl/bcrsmatrix.hh>
+#include <dune/common/dynmatrix.hh>
 
 namespace Opm {
 namespace Elasticity {
@@ -83,8 +84,6 @@ class MatrixOps {
     //! \details This is only useful for debugging as the files grow very big
     static void saveAsc(const Matrix& A, const std::string& file);
 };
-
-#include "matrixops_impl.hpp"
 
 }
 }

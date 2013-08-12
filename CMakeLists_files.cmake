@@ -29,6 +29,7 @@ list (APPEND MAIN_SOURCE_FILES
 	opm/elasticity/boundarygrid.cpp
 	opm/elasticity/material.cpp
 	opm/elasticity/materials.cpp
+	opm/elasticity/matrixops.cpp
 	opm/elasticity/meshcolorizer.cpp
 	opm/elasticity/mpc.cpp
 	)
@@ -111,7 +112,6 @@ list (APPEND PUBLIC_HEADER_FILES
 	opm/elasticity/material.hh
 	opm/elasticity/materials.hh
 	opm/elasticity/matrixops.hpp
-	opm/elasticity/matrixops_impl.hpp
 	opm/elasticity/mortar_evaluator.hpp
 	opm/elasticity/mortar_schur.hpp
 	opm/elasticity/mortar_schur_precond.hpp
