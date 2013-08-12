@@ -85,6 +85,9 @@ struct LinSolParams {
   //! \brief Number of cells in z to collapse in each cell
   int zcells;
 
+  //! \brief Use the fast AMG
+  bool fastamg;
+
   //! \brief Preconditioner for mortar block
   Opm::Elasticity::Preconditioner mortarpre;
 
@@ -104,6 +107,7 @@ struct LinSolParams {
     steps[1] = param.getDefault<int>("linsolver_poststeps", 2);
     coarsen_target = param.getDefault<int>("linsolver_coarsen", 5000);
     symmetric = param.getDefault<bool>("linsolver_symmetric", true);
+    fastamg  = param.getDefault<bool>("fastamg",false);
     solver = param.getDefault<std::string>("linsolver_mortarpre","schuramg");
     if (solver == "schuramg")
       mortarpre = Opm::Elasticity::SCHURAMG;

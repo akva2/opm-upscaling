@@ -53,9 +53,11 @@ void syntax(char** argv)
             << "\t linsolver_type=iterative - use a suitable iterative method (cg or gmres)" << std::endl
             << "\t linsolver_type=direct    - use the SuperLU sparse direct solver" << std::endl
             << "\t verbose                  - set to true to get verbose output" << std::endl
+            << "\t fastamg                  - use the fast AMG" << std::endl
             << "\t linsolver_restart        - number of iterations before gmres is restarted" << std::endl
             << "\t linsolver_presteps       - number of pre-smooth steps in the AMG" << std::endl
             << "\t linsolver_poststeps      - number of post-smooth steps in the AMG" << std::endl
+            << "\t linsolver_smoother       - smoother used in the AMG" << std::endl
             << "\t\t affects memory usage" << std::endl
             << "\t linsolver_symmetric      - use symmetric linear solver. Defaults to true" << std::endl
             << "\t mortar_precond           - preconditioner for mortar block. Defaults to schur-amg" << std::endl;
@@ -106,8 +108,7 @@ struct Params {
   int cellsz;
   //! \brief verbose output
   bool verbose;
-  //! \brief Use the fast AMG
-  bool fastamg;
+
 };
 
 //! \brief Parse the command line arguments
@@ -136,7 +137,6 @@ void parseCommandLine(int argc, char** argv, Params& p)
   p.vtufile  = param.getDefault<std::string>("vtufilename","");
   p.output   = param.getDefault<std::string>("output","");
   p.verbose  = param.getDefault<bool>("verbose",false);
-  p.fastamg  = param.getDefault<bool>("fastamg",false);
   size_t i;
   if ((i=p.vtufile.find(".vtu")) != std::string::npos)
     p.vtufile = p.vtufile.substr(0,i);
@@ -363,7 +363,7 @@ int main(int argc, char** argv)
   Params p;
   parseCommandLine(argc,argv,p);
 
-  if (p.fastamg)
+  if (p.linsolver.fastamg)
     return run<Dune::CpGrid, Opm::Elasticity::FastAMG>(p);
   else
     return run<Dune::CpGrid, Opm::Elasticity::AMG>(p);
