@@ -96,6 +96,8 @@ struct Params {
   int n1;
   //! \brief Number of elements on interface grid in the y direction
   int n2;
+
+  //! \brief Linear solver parameters
   Opm::Elasticity::LinSolParams linsolver;
 
   // Debugging options
@@ -289,6 +291,7 @@ int run(Params& p)
       upscale.fixCorners(p.min, p.max);
       upscale.A.initForAssembly();
     }
+
     Dune::FieldMatrix<double,6,6> C;
     Opm::Elasticity::Vector field[6];
     std::cout << "assembling elasticity operator..." << "\n";
