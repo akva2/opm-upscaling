@@ -108,7 +108,8 @@ struct Params {
   int cellsz;
   //! \brief verbose output
   bool verbose;
-
+  //! \brief Run a mesh inspection only
+  bool inspect;
 };
 
 //! \brief Parse the command line arguments
@@ -137,6 +138,7 @@ void parseCommandLine(int argc, char** argv, Params& p)
   p.vtufile  = param.getDefault<std::string>("vtufilename","");
   p.output   = param.getDefault<std::string>("output","");
   p.verbose  = param.getDefault<bool>("verbose",false);
+  p.inspect  = param.getDefault<bool>("inspect",false);
   size_t i;
   if ((i=p.vtufile.find(".vtu")) != std::string::npos)
     p.vtufile = p.vtufile.substr(0,i);
@@ -269,6 +271,9 @@ int run(Params& p)
               << "x"                   << grid.logicalCartesianSize()[1]
               << "x"                   << grid.logicalCartesianSize()[2]
               << std::endl;
+
+    if (p.inspect)
+      return 0;
 
     if (p.method == UPSCALE_MPC) {
       std::cout << "using MPC couplings in all directions..." << std::endl;
