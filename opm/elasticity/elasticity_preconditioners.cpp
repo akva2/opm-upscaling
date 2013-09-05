@@ -39,7 +39,7 @@ Schwarz::type* Schwarz::setup2(int pre, int post, int target,
                                const Dune::CpGrid& gv,
                                ASMHandler<Dune::CpGrid>& A, bool& copy)
 {
-  const int cps = 2;
+  const int cps = 1;
   Schwarz::type::subdomain_vector rows;
   int nel1 = gv.logicalCartesianSize()[0];
   int nel2 = gv.logicalCartesianSize()[1];
