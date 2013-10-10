@@ -96,23 +96,31 @@ typedef struct {
   int nsatpoints;
 } ChopSettings;
 
+typedef struct {
+    std::vector<double> porosities;
+    std::vector<double> permxs;
+    std::vector<double> permys;
+    std::vector<double> permzs;
+    std::vector<double> permyzs;
+    std::vector<double> permxzs;
+    std::vector<double> permxys;
+    std::vector<double> minsws;
+    std::vector<double> maxsws;
+    std::vector< std::vector<double> > pcvalues;
+    std::vector<double> dipangs;
+    std::vector<double> azimuths;
+    // Initialize a matrix for subsample satnum volumes. 
+    // Outer index is subsample index, inner index is SATNUM-value
+    std::vector< std::vector<double> > rockvolumes;
+    std::vector<double> netporosities;
+    std::vector<double> ntgs;
+    std::vector<int> subsampletab;
+    std::vector<int> subsample_failed;
+} ChopThreadContext;
+
 void do_chop(int sample, const ChopSettings& settings,
-              std::vector<double>& porosities,
-              std::vector<double>& permxs,
-              std::vector<double>& permys,
-              std::vector<double>& permzs,
-              std::vector<double>& permyzs,
-              std::vector<double>& permxzs,
-              std::vector<double>& permxys,
-              std::vector<double>& minsws,
-              std::vector<double>& maxsws,
-              std::vector< std::vector<double> >& pcvalues,
-              std::vector<double>& dipangs,
-              std::vector<double>& azimuths,
-              std::vector< std::vector<double> >& rockvolumes,
-              std::vector<double>& netporosities,
-              std::vector<double>& ntgs,
-              int ri, int rj, int rz, const Opm::CornerPointChopper& ch)
+             ChopThreadContext& tcontext,
+             int ri, int rj, int rz, const Opm::CornerPointChopper& ch)
 {
   int istart = ri;
   int jstart = rj;
@@ -150,17 +158,17 @@ void do_chop(int sample, const ChopSettings& settings,
       Opm::SinglePhaseUpscaler::permtensor_t upscaled_K = upscaler.upscaleSinglePhase();
       upscaled_K *= (1.0/(Opm::prefix::milli*Opm::unit::darcy));
 
-      porosities.push_back(upscaler.upscalePorosity());
+      tcontext.porosities.push_back(upscaler.upscalePorosity());
       if (!context.new_NTG_.empty()) {
-        netporosities.push_back(upscaler.upscaleNetPorosity());
-        ntgs.push_back(upscaler.upscaleNTG());
+        tcontext.netporosities.push_back(upscaler.upscaleNetPorosity());
+        tcontext.ntgs.push_back(upscaler.upscaleNTG());
       }
-      permxs.push_back(upscaled_K(0,0));
-      permys.push_back(upscaled_K(1,1));
-      permzs.push_back(upscaled_K(2,2));
-      permyzs.push_back(upscaled_K(1,2));
-      permxzs.push_back(upscaled_K(0,2));
-      permxys.push_back(upscaled_K(0,1));
+      tcontext.permxs.push_back(upscaled_K(0,0));
+      tcontext.permys.push_back(upscaled_K(1,1));
+      tcontext.permzs.push_back(upscaled_K(2,2));
+      tcontext.permyzs.push_back(upscaled_K(1,2));
+      tcontext.permxzs.push_back(upscaled_K(0,2));
+      tcontext.permxys.push_back(upscaled_K(0,1));
     }
 
     if (settings.endpoints) {
@@ -220,17 +228,16 @@ void do_chop(int sample, const ChopSettings& settings,
 
       // If upscling=false, we still (may) want to have porosities together with endpoints
       if (!settings.upscale) {
-        porosities.push_back(upscaler.upscalePorosity());
+        tcontext.porosities.push_back(upscaler.upscalePorosity());
       }
 
       // Total porevolume and total volume -> upscaled porosity:
-      double poreVolume = std::accumulate(cellPoreVolumes.begin(), 
-          cellPoreVolumes.end(),
-          0.0);
+      double poreVolume = std::accumulate(cellPoreVolumes.begin(),
+                                          cellPoreVolumes.end(), 0.0);
       double Swir = Swirvolume/poreVolume;
       double Swor = Sworvolume/poreVolume;
-      minsws.push_back(Swir);
-      maxsws.push_back(Swor);
+      tcontext.minsws.push_back(Swir);
+      tcontext.maxsws.push_back(Swor);
       if (settings.cappres) {
         // Upscale capillary pressure function
         Opm::MonotCubicInterpolator WaterSaturationVsCapPressure;
@@ -299,7 +306,7 @@ void do_chop(int sample, const ChopSettings& settings,
         for (int satp=0; satp<settings.nsatpoints; ++satp) {
           pcs.push_back(CapPressureVsWaterSaturation.evaluate(Swir+(Swor-Swir)/(settings.nsatpoints-1)*satp));
         }
-        pcvalues.push_back(pcs);
+        tcontext.pcvalues.push_back(pcs);
       }
 
     }
@@ -336,8 +343,8 @@ void do_chop(int sample, const ChopSettings& settings,
       // Convert to dip and azimuth
       double azimuth = atan(xdipaverage/ydipaverage)+settings.azimuthdisplacement;
       double dip = acos(1.0/sqrt(pow(xdipaverage,2.0)+pow(ydipaverage,2.0)+1.0));
-      dipangs.push_back(dip);
-      azimuths.push_back(azimuth);                    
+      tcontext.dipangs.push_back(dip);
+      tcontext.azimuths.push_back(azimuth);                    
     }
 
     int maxSatnum = 0; // This value is determined from the chopped cells.
@@ -364,7 +371,7 @@ void do_chop(int sample, const ChopSettings& settings,
       for (size_t satnum_idx = 0; satnum_idx < rockvolumessubsample.size(); ++satnum_idx) {
         rockvolumessubsample_normalized.push_back(rockvolumessubsample[satnum_idx]/subsamplevolume);
       }
-      rockvolumes.push_back(rockvolumessubsample_normalized);
+      tcontext.rockvolumes.push_back(rockvolumessubsample_normalized);
     }
   }
   catch (...) {
@@ -584,38 +591,16 @@ try
 #ifdef HAVE_OPENMP
     threads = omp_get_max_threads();
 #endif
-    std::vector< std::vector<double> > porosities_glob(threads);
-    std::vector< std::vector<double> > netporosities_glob(threads);
-    std::vector< std::vector<double> > ntgs_glob(threads);
-    std::vector< std::vector<double> > permxs_glob(threads);
-    std::vector< std::vector<double> > permys_glob(threads);
-    std::vector< std::vector<double> > permzs_glob(threads);
-    std::vector< std::vector<double> > permyzs_glob(threads);
-    std::vector< std::vector<double> > permxzs_glob(threads);
-    std::vector< std::vector<double> > permxys_glob(threads);
-    std::vector< std::vector<double> > minsws_glob(threads), maxsws_glob(threads);
-    std::vector< std::vector<std::vector<double> > > pcvalues_glob(threads);
-    std::vector< std::vector<double> > dipangs_glob(threads), azimuths_glob(threads);
-    std::vector< std::vector<int> > subsampletab(threads);
-    std::vector< std::vector<int> > subsample_failed(threads);
-
-    // Initialize a matrix for subsample satnum volumes. 
-    // Outer index is subsample index, inner index is SATNUM-value
-    std::vector<std::vector<std::vector<double> > > rockvolumes_glob;
-    rockvolumes_glob.resize(threads);
+    std::vector<ChopThreadContext> ctx(threads);
 
     // first subsample has to run single threaded.
     // OPM builds up a lot of maps and tables as new entries are encountered
     // and this breaks badly with multiple threads.
     // run first subsample single threaded to get tables initialized,
     // then run the rest in parallel
-    do_chop(1, settings, porosities_glob[0], permxs_glob[0], permys_glob[0],
-            permzs_glob[0], permyzs_glob[0], permxzs_glob[0], permxys_glob[0],
-            minsws_glob[0], maxsws_glob[0], pcvalues_glob[0],
-            dipangs_glob[0], azimuths_glob[0], rockvolumes_glob[0],
-            netporosities_glob[0], ntgs_glob[0], ri(), rj(), rz(), ch);
+    do_chop(1, settings, ctx[0], ri(), rj(), rz(), ch);
     int finished_subsamples = 1; // keep explicit count of successful subsamples
-    subsampletab[0].push_back(0);
+    ctx[0].subsampletab.push_back(0);
 
 #pragma omp parallel for schedule(static) reduction(+:finished_subsamples)
     for (int sample = 2; sample <= settings.subsamples; ++sample) {
@@ -624,75 +609,55 @@ try
         thread = omp_get_thread_num();
 #endif
         try {
-            do_chop(sample, settings, porosities_glob[thread],
-                    permxs_glob[thread], permys_glob[thread],
-                    permzs_glob[thread], permyzs_glob[thread],
-                    permxzs_glob[thread], permxys_glob[thread],
-                    minsws_glob[thread], maxsws_glob[thread],
-                    pcvalues_glob[thread], dipangs_glob[thread],
-                    azimuths_glob[thread], rockvolumes_glob[thread],
-                    netporosities_glob[thread], ntgs_glob[thread],
+            do_chop(sample, settings, ctx[thread], 
                     ri(), rj(), rz(), ch);
-            subsampletab[thread].push_back(sample-1);
+            ctx[thread].subsampletab.push_back(sample-1);
             finished_subsamples++;
         } catch (...) {
-            subsample_failed[thread].push_back(sample-1);
+            ctx[thread].subsample_failed.push_back(sample-1);
             std::cerr << "Warning: Upscaling chopped subsample nr. " << sample << " failed, proceeding to next subsample\n";
         }
     }
 
     // compress data
-    std::vector<double> porosities(finished_subsamples);
-    std::vector<double> netporosities(finished_subsamples);
-    std::vector<double> ntgs(finished_subsamples);
-    std::vector<double> permxs(finished_subsamples);
-    std::vector<double> permys(finished_subsamples);
-    std::vector<double> permzs(finished_subsamples);
-    std::vector<double> permyzs(finished_subsamples);
-    std::vector<double> permxzs(finished_subsamples);
-    std::vector<double> permxys(finished_subsamples);
-    std::vector<double> minsws(finished_subsamples);
-    std::vector<double> maxsws(finished_subsamples);
-    std::vector<std::vector<double> > pcvalues(finished_subsamples);
-    std::vector<double> dipangs(finished_subsamples);
-    std::vector<double> azimuths(finished_subsamples);
-    std::vector< std::vector<double> > rockvolumes(finished_subsamples);
-    std::vector<int> mapping(settings.subsamples, -1);
+    ChopThreadContext sc;
     int l=0;
+    std::vector<int> mapping(settings.subsamples, -1);
     for (int k=0;k<settings.subsamples;++k) {
       for (int i=0;i<threads;++i) {
-        if (std::find(subsample_failed[i].begin(),
-                      subsample_failed[i].end(), k) == subsample_failed[i].end())
+        if (std::find(ctx[i].subsample_failed.begin(),
+                      ctx[i].subsample_failed.end(), k) == ctx[i].subsample_failed.end())
           mapping[k] = l++;
       }
     }
 
     for (int i=0;i<threads;++i) {
-      for (size_t j=0;j<subsampletab[i].size();++j) {
-        int idx = mapping[subsampletab[i][j]];
+      for (size_t j=0;j<ctx[i].subsampletab.size();++j) {
+        int idx = mapping[ctx[i].subsampletab[j]];
+        assert(idx != -1);
         if (settings.upscale) {
-          porosities[idx] = porosities_glob[i][j];
-          permxs[idx] = permxs_glob[i][j];
-          permys[idx] = permys_glob[i][j];
-          permzs[idx] = permzs_glob[i][j];
-          permyzs[idx] = permyzs_glob[i][j];
-          permxzs[idx] = permxzs_glob[i][j];
-          permxys[idx] = permxys_glob[i][j];
-          if (netporosities_glob[i].size()) {
-            netporosities[idx] = netporosities_glob[i][j];
-            ntgs[idx] = ntgs_glob[i][j];
+          sc.porosities[idx] = ctx[i].porosities[j];
+          sc.permxs[idx] = ctx[i].permxs[j];
+          sc.permys[idx] = ctx[i].permys[j];
+          sc.permzs[idx] = ctx[i].permzs[j];
+          sc.permyzs[idx] = ctx[i].permyzs[j];
+          sc.permxzs[idx] = ctx[i].permxzs[j];
+          sc.permxys[idx] = ctx[i].permxys[j];
+          if (ctx[i].netporosities.size()) {
+            sc.netporosities[idx] = ctx[i].netporosities[j];
+            sc.ntgs[idx] = ctx[i].ntgs[j];
           }
         }
         if (settings.endpoints) {
-          minsws[idx] = minsws_glob[i][j];
-          maxsws[idx] = maxsws_glob[i][j];
+          sc.minsws[idx] = ctx[i].minsws[j];
+          sc.maxsws[idx] = ctx[i].maxsws[j];
         }
         if (settings.cappres)
-          pcvalues[idx] = pcvalues_glob[i][j];
+          sc.pcvalues[idx] = ctx[i].pcvalues[j];
         if (settings.dips)
-          azimuths[idx] = azimuths_glob[i][j];
+          sc.azimuths[idx] = ctx[i].azimuths[j];
         if (settings.satnumvolumes)
-          rockvolumes[idx] = rockvolumes_glob[i][j];
+          sc.rockvolumes[idx] = ctx[i].rockvolumes[j];
       }
     }
 
@@ -724,7 +689,7 @@ try
     outputtmp << "# id";
     if (settings.upscale) {
         if (settings.isPeriodic) {
-            if (!ntgs.empty()) {
+            if (!sc.ntgs.empty()) {
                 outputtmp << "          porosity                netporosity             ntg                      permx                   permy                   permz                   permyz                  permxz                  permxy                  netpermh";
             }
             else {
@@ -732,7 +697,7 @@ try
             }
         }
         else if (settings.isFixed) {
-            if (!ntgs.empty()) {
+            if (!sc.ntgs.empty()) {
                 outputtmp << "          porosity                netporosity             ntg                      permx                   permy                   permz                   netpermh";
             }
             else {
@@ -764,59 +729,59 @@ try
 	outputtmp << sample << '\t';
 	if (settings.upscale) {
 	    outputtmp <<
-		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << porosities[sample-1] << '\t';
-            if (!ntgs.empty()) {
-                outputtmp << std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << netporosities[sample-1] << '\t' <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << ntgs[sample-1] << '\t';
+		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.porosities[sample-1] << '\t';
+            if (!sc.ntgs.empty()) {
+                outputtmp << std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.netporosities[sample-1] << '\t' <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.ntgs[sample-1] << '\t';
             }
             outputtmp <<
-		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permxs[sample-1] << '\t' <<
-		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permys[sample-1] << '\t' <<
-		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permzs[sample-1] << '\t';
+		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.permxs[sample-1] << '\t' <<
+		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.permys[sample-1] << '\t' <<
+		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.permzs[sample-1] << '\t';
             if (settings.isPeriodic) {
                 outputtmp <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permyzs[sample-1] << '\t' <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permxzs[sample-1] << '\t' <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permxys[sample-1] << '\t';                
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.permyzs[sample-1] << '\t' <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.permxzs[sample-1] << '\t' <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.permxys[sample-1] << '\t';                
             }
-            if (!ntgs.empty()) {
+            if (!sc.ntgs.empty()) {
                 outputtmp <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << (permxs[sample-1]+permys[sample-1])/(2.0*ntgs[sample-1]) << '\t';
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << (sc.permxs[sample-1]+sc.permys[sample-1])/(2.0*sc.ntgs[sample-1]) << '\t';
             }
 	}
 	if (settings.endpoints) {
             if (!settings.upscale) {
                 outputtmp <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << porosities[sample-1] << '\t';
-                if (!ntgs.empty()) {
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.porosities[sample-1] << '\t';
+                if (!sc.ntgs.empty()) {
                     outputtmp <<
-                        std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << netporosities[sample-1] << '\t' <<
-                        std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << ntgs[sample-1] << '\t';
+                        std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.netporosities[sample-1] << '\t' <<
+                        std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.ntgs[sample-1] << '\t';
                 }
 
             }
 	    outputtmp <<
-		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << minsws[sample-1] << '\t' <<
-		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << maxsws[sample-1];
+		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.minsws[sample-1] << '\t' <<
+		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.maxsws[sample-1];
             if (settings.cappres) {
                 outputtmp <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << pcvalues[sample-1][0] << '\t' <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << pcvalues[sample-1][1] << '\t' <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << pcvalues[sample-1][2] << '\t' <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << pcvalues[sample-1][3] << '\t' <<
-                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << pcvalues[sample-1][4];
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.pcvalues[sample-1][0] << '\t' <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.pcvalues[sample-1][1] << '\t' <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.pcvalues[sample-1][2] << '\t' <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.pcvalues[sample-1][3] << '\t' <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.pcvalues[sample-1][4];
             }
 	}
 	if (settings.dips) {
 	    outputtmp <<
-		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << dipangs[sample-1] << '\t' <<
-		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << azimuths[sample-1];
+		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.dipangs[sample-1] << '\t' <<
+		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << sc.azimuths[sample-1];
 	}
 	if (settings.satnumvolumes) {
-	    for (size_t satnumidx = 0; satnumidx < rockvolumes[sample-1].size(); ++satnumidx) {
+	    for (size_t satnumidx = 0; satnumidx < sc.rockvolumes[sample-1].size(); ++satnumidx) {
 		outputtmp <<
 		    std::showpoint << std::setw(fieldwidth) <<
-		    std::setprecision(outputprecision) << rockvolumes[sample-1][satnumidx] << '\t';
+		    std::setprecision(outputprecision) << sc.rockvolumes[sample-1][satnumidx] << '\t';
 	    }
 	}
 	outputtmp <<  std::endl;
