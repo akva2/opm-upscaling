@@ -110,6 +110,8 @@ void do_chop(int sample, const ChopSettings& settings,
               std::vector<double>& dipangs,
               std::vector<double>& azimuths,
               std::vector< std::vector<double> >& rockvolumes,
+              std::vector<double>& netporosities,
+              std::vector<double>& ntgs,
               int ri, int rj, int rz, const Opm::CornerPointChopper& ch)
 {
   int istart = ri;
@@ -149,6 +151,10 @@ void do_chop(int sample, const ChopSettings& settings,
       upscaled_K *= (1.0/(Opm::prefix::milli*Opm::unit::darcy));
 
       porosities.push_back(upscaler.upscalePorosity());
+      if (!context.new_NTG_.empty()) {
+        netporosities.push_back(upscaler.upscaleNetPorosity());
+        ntgs.push_back(upscaler.upscaleNTG());
+      }
       permxs.push_back(upscaled_K(0,0));
       permys.push_back(upscaled_K(1,1));
       permzs.push_back(upscaled_K(2,2));
@@ -579,6 +585,8 @@ try
     threads = omp_get_max_threads();
 #endif
     std::vector< std::vector<double> > porosities_glob(threads);
+    std::vector< std::vector<double> > netporosities_glob(threads);
+    std::vector< std::vector<double> > ntgs_glob(threads);
     std::vector< std::vector<double> > permxs_glob(threads);
     std::vector< std::vector<double> > permys_glob(threads);
     std::vector< std::vector<double> > permzs_glob(threads);
@@ -588,8 +596,8 @@ try
     std::vector< std::vector<double> > minsws_glob(threads), maxsws_glob(threads);
     std::vector< std::vector<std::vector<double> > > pcvalues_glob(threads);
     std::vector< std::vector<double> > dipangs_glob(threads), azimuths_glob(threads);
-    std::vector< std::vector<int> > subsampletab;
-    subsampletab.resize(threads);
+    std::vector< std::vector<int> > subsampletab(threads);
+    std::vector< std::vector<int> > subsample_failed(threads);
 
     // Initialize a matrix for subsample satnum volumes. 
     // Outer index is subsample index, inner index is SATNUM-value
@@ -605,7 +613,7 @@ try
             permzs_glob[0], permyzs_glob[0], permxzs_glob[0], permxys_glob[0],
             minsws_glob[0], maxsws_glob[0], pcvalues_glob[0],
             dipangs_glob[0], azimuths_glob[0], rockvolumes_glob[0],
-            ri(), rj(), rz(), ch);
+            netporosities_glob[0], ntgs_glob[0], ri(), rj(), rz(), ch);
     int finished_subsamples = 1; // keep explicit count of successful subsamples
     subsampletab[0].push_back(0);
 
@@ -623,16 +631,20 @@ try
                     minsws_glob[thread], maxsws_glob[thread],
                     pcvalues_glob[thread], dipangs_glob[thread],
                     azimuths_glob[thread], rockvolumes_glob[thread],
+                    netporosities_glob[thread], ntgs_glob[thread],
                     ri(), rj(), rz(), ch);
             subsampletab[thread].push_back(sample-1);
             finished_subsamples++;
         } catch (...) {
+            subsample_failed[thread].push_back(sample-1);
             std::cerr << "Warning: Upscaling chopped subsample nr. " << sample << " failed, proceeding to next subsample\n";
         }
     }
 
-    // order data in correct order
+    // compress data
     std::vector<double> porosities(finished_subsamples);
+    std::vector<double> netporosities(finished_subsamples);
+    std::vector<double> ntgs(finished_subsamples);
     std::vector<double> permxs(finished_subsamples);
     std::vector<double> permys(finished_subsamples);
     std::vector<double> permzs(finished_subsamples);
@@ -645,27 +657,42 @@ try
     std::vector<double> dipangs(finished_subsamples);
     std::vector<double> azimuths(finished_subsamples);
     std::vector< std::vector<double> > rockvolumes(finished_subsamples);
+    std::vector<int> mapping(settings.subsamples, -1);
+    int l=0;
+    for (int k=0;k<settings.subsamples;++k) {
+      for (int i=0;i<threads;++i) {
+        if (std::find(subsample_failed[i].begin(),
+                      subsample_failed[i].end(), k) == subsample_failed[i].end())
+          mapping[k] = l++;
+      }
+    }
+
     for (int i=0;i<threads;++i) {
       for (size_t j=0;j<subsampletab[i].size();++j) {
+        int idx = mapping[subsampletab[i][j]];
         if (settings.upscale) {
-          porosities[subsampletab[i][j]] = porosities_glob[i][j];
-          permxs[subsampletab[i][j]] = permxs_glob[i][j];
-          permys[subsampletab[i][j]] = permys_glob[i][j];
-          permzs[subsampletab[i][j]] = permzs_glob[i][j];
-          permyzs[subsampletab[i][j]] = permyzs_glob[i][j];
-          permxzs[subsampletab[i][j]] = permxzs_glob[i][j];
-          permxys[subsampletab[i][j]] = permxys_glob[i][j];
+          porosities[idx] = porosities_glob[i][j];
+          permxs[idx] = permxs_glob[i][j];
+          permys[idx] = permys_glob[i][j];
+          permzs[idx] = permzs_glob[i][j];
+          permyzs[idx] = permyzs_glob[i][j];
+          permxzs[idx] = permxzs_glob[i][j];
+          permxys[idx] = permxys_glob[i][j];
+          if (netporosities_glob[i].size()) {
+            netporosities[idx] = netporosities_glob[i][j];
+            ntgs[idx] = ntgs_glob[i][j];
+          }
         }
         if (settings.endpoints) {
-          minsws[subsampletab[i][j]] = minsws_glob[i][j];
-          maxsws[subsampletab[i][j]] = maxsws_glob[i][j];
+          minsws[idx] = minsws_glob[i][j];
+          maxsws[idx] = maxsws_glob[i][j];
         }
         if (settings.cappres)
-          pcvalues[subsampletab[i][j]] = pcvalues_glob[i][j];
+          pcvalues[idx] = pcvalues_glob[i][j];
         if (settings.dips)
-          azimuths[subsampletab[i][j]] = azimuths_glob[i][j];
+          azimuths[idx] = azimuths_glob[i][j];
         if (settings.satnumvolumes)
-          rockvolumes[subsampletab[i][j]] = rockvolumes_glob[i][j];
+          rockvolumes[idx] = rockvolumes_glob[i][j];
       }
     }
 
@@ -697,7 +724,7 @@ try
     outputtmp << "# id";
     if (settings.upscale) {
         if (settings.isPeriodic) {
-            if (0) { //ch.hasNTG()) {
+            if (!ntgs.empty()) {
                 outputtmp << "          porosity                netporosity             ntg                      permx                   permy                   permz                   permyz                  permxz                  permxy                  netpermh";
             }
             else {
@@ -705,7 +732,7 @@ try
             }
         }
         else if (settings.isFixed) {
-            if (0) {// ch.hasNTG()) {
+            if (!ntgs.empty()) {
                 outputtmp << "          porosity                netporosity             ntg                      permx                   permy                   permz                   netpermh";
             }
             else {
@@ -738,9 +765,9 @@ try
 	if (settings.upscale) {
 	    outputtmp <<
 		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << porosities[sample-1] << '\t';
-            if (0) { //ch.hasNTG()) {
-//                outputtmp << std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << netporosities[sample-1] << '\t' <<
-//                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << ntgs[sample-1] << '\t';
+            if (!ntgs.empty()) {
+                outputtmp << std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << netporosities[sample-1] << '\t' <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << ntgs[sample-1] << '\t';
             }
             outputtmp <<
 		std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permxs[sample-1] << '\t' <<
@@ -752,19 +779,19 @@ try
                     std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permxzs[sample-1] << '\t' <<
                     std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << permxys[sample-1] << '\t';                
             }
-            if (0) { //ch.hasNTG()) {
-//                outputtmp <<
-//                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << (permxs[sample-1]+permys[sample-1])/(2.0*ntgs[sample-1]) << '\t';
+            if (!ntgs.empty()) {
+                outputtmp <<
+                    std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << (permxs[sample-1]+permys[sample-1])/(2.0*ntgs[sample-1]) << '\t';
             }
 	}
 	if (settings.endpoints) {
             if (!settings.upscale) {
                 outputtmp <<
                     std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << porosities[sample-1] << '\t';
-                if (0) { //ch.hasNTG()) {
-//                    outputtmp <<
-//                        std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << netporosities[sample-1] << '\t' <<
-//                        std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << ntgs[sample-1] << '\t';
+                if (!ntgs.empty()) {
+                    outputtmp <<
+                        std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << netporosities[sample-1] << '\t' <<
+                        std::showpoint << std::setw(fieldwidth) << std::setprecision(outputprecision) << ntgs[sample-1] << '\t';
                 }
 
             }
