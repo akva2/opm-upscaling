@@ -40,7 +40,6 @@
 namespace Opm {
 namespace Elasticity {
 
-
 //! \brief An enumeration of available linear solver classes
 enum Solver {
   DIRECT,
@@ -51,7 +50,8 @@ enum Preconditioner {
   AMG,
   FASTAMG,
   SCHWARZ,
-  TWOLEVEL
+  TWOLEVEL,
+  UNDETERMINED
 };
 
 //! \brief An enumeration of the available preconditioners for multiplier block
@@ -128,7 +128,10 @@ struct LinSolParams {
     coarsen_target = param.getDefault<int>("linsolver_coarsen", 5000);
     symmetric = param.getDefault<bool>("linsolver_symmetric", true);
     report = param.getDefault<bool>("linsolver_report", false);
-    solver = param.getDefault<std::string>("linsolver_pre","amg");
+    solver = param.getDefault<std::string>("linsolver_pre","");
+
+    if (solver == "") // set default based on aspect ratio heuristic
+      solver="heuristic";
 
     if (solver == "schwarz")
       pre = SCHWARZ;
@@ -136,6 +139,8 @@ struct LinSolParams {
       pre = FASTAMG;
     else if (solver == "twolevel")
       pre = TWOLEVEL;
+    else if (solver == "heuristic")
+      pre = UNDETERMINED;
     else
       pre = AMG;
 
