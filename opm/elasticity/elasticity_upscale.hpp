@@ -30,6 +30,7 @@
 #include <opm/elasticity/logutils.hpp>
 #include <opm/elasticity/materials.hh>
 #include <opm/elasticity/matrixops.hpp>
+#include <opm/elasticity/meshcolorizer.hpp>
 #include <opm/elasticity/mpc.hh>
 #include <opm/elasticity/mortar_schur.hpp>
 #include <opm/elasticity/mortar_utils.hpp>
@@ -227,7 +228,8 @@ class ElasticityUpscale
     ElasticityUpscale(const GridType& gv_, ctype tol_, ctype Escale_, 
                       const std::string& file, const std::string& rocklist,
                       bool verbose_)
-      :  A(gv_), gv(gv_), tol(tol_), Escale(Escale_), E(gv_), verbose(verbose_)
+      :  A(gv_), gv(gv_), tol(tol_), Escale(Escale_), E(gv_), verbose(verbose_),
+         color(gv_)
     {
       if (rocklist.empty())
         loadMaterialsFromGrid(file);
@@ -426,7 +428,7 @@ class ElasticityUpscale
 
     //! \brief Linear solver
     typedef std::shared_ptr<Dune::InverseOperator<Vector, Vector> > SolverPtr;
-    SolverPtr solver;
+    std::vector<SolverPtr> tsolver;
 
     //! \brief Matrix adaptor for the elasticity block
     std::shared_ptr<Operator> op;
@@ -441,7 +443,7 @@ class ElasticityUpscale
     std::shared_ptr<SchurEvaluator> op2;
 
     //! \brief The preconditioner for the elasticity operator
-    PCPtr upre;
+    std::vector<PCPtr> upre;
 
     //! \brief An LU solve as a preconditioner
     typedef Dune::InverseOperator2Preconditioner<LUSolver,
@@ -452,7 +454,7 @@ class ElasticityUpscale
 
     //! \brief Preconditioner for the Mortar system
     typedef std::shared_ptr< MortarSchurPre<PCType> > MortarAmgPtr;
-    MortarAmgPtr tmpre;
+    std::vector<MortarAmgPtr> tmpre;
 
     //! \brief Evaluator for the Mortar system
     std::shared_ptr<MortarEvaluator> meval;
@@ -462,6 +464,9 @@ class ElasticityUpscale
 
     //! \brief Verbose output
     bool verbose;
+
+    //! \brief Mesh colorizer used with multithreaded assembly
+    MeshColorizer<GridType> color;
 };
 #include "elasticity_upscale_impl.hpp"
 
