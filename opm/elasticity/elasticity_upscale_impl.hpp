@@ -581,23 +581,35 @@ IMPL_FUNC(void, loadMaterialsFromGrid(const std::string& file))
     Emod.insert(Emod.begin(),cells,100.f);
     Poiss.insert(Poiss.begin(),cells,0.38f);
   } else {
-    Opm::ParserPtr parser(new Opm::Parser());
-    Opm::DeckConstPtr deck(parser->parseFile(file));
-    if (deck->hasKeyword("YOUNGMOD") && deck->hasKeyword("POISSONMOD")) {
-      Emod = deck->getKeyword("YOUNGMOD")->getRawDoubleData();
-      Poiss = deck->getKeyword("POISSONMOD")->getRawDoubleData();
-    } else if (deck->hasKeyword("LAMEMOD") && deck->hasKeyword("SHEARMOD")) {
-      std::vector<double> lame = deck->getKeyword("LAMEMOD")->getRawDoubleData();
-      std::vector<double> shear = deck->getKeyword("SHEARMOD")->getRawDoubleData();
+    Opm::EclipseGridParser parser(file,false);
+    if (parser.hasField("YOUNGMOD") && parser.hasField("POISSONMOD")) {
+      Emod = parser.getFloatingPointValue("YOUNGMOD");
+      Poiss = parser.getFloatingPointValue("POISSONMOD");
+      std::vector<double>::const_iterator it = std::min_element(Poiss.begin(), Poiss.end());
+      if (*it < 0) {
+        std::cerr << "Auxetic material specified for cell " << it-Poiss.begin() << std::endl
+                  << "Emod: "<< Emod[it-Poiss.begin()] << " Poisson's ratio: " << *it << std::endl << "bailing..." << std::endl;
+        exit(1);
+      }
+    } else if (parser.hasField("LAMEMOD") && parser.hasField("SHEARMOD")) {
+      std::vector<double> lame = parser.getFloatingPointValue("LAMEMOD");
+      std::vector<double> shear = parser.getFloatingPointValue("SHEARMOD");
       Emod.resize(lame.size());
       Poiss.resize(lame.size());
       for (size_t i=0;i<lame.size();++i) {
         Emod[i]  = shear[i]*(3*lame[i]+2*shear[i])/(lame[i]+shear[i]);
         Poiss[i] = 0.5*lame[i]/(lame[i]+shear[i]);
       }
-    } else if (deck->hasKeyword("BULKMOD") && deck->hasKeyword("SHEARMOD")) {
-      std::vector<double> bulk = deck->getKeyword("BULKMOD")->getRawDoubleData();
-      std::vector<double> shear = deck->getKeyword("SHEARMOD")->getRawDoubleData();
+      std::vector<double>::const_iterator it = std::min_element(Poiss.begin(), Poiss.end());
+      if (*it < 0) {
+        std::cerr << "Auxetic material specified for cell " << it-Poiss.begin() << std::endl
+                  << "Lamè modulus: " << lame[it-Poiss.begin()] << " Shearmodulus: " << shear[it-Poiss.begin()] << std::endl
+                  << "Emod: "<< Emod[it-Poiss.begin()] << " Poisson's ratio: " << *it << std::endl << "bailing..." << std::endl;
+        exit(1);
+      }
+    } else if (parser.hasField("BULKMOD") && parser.hasField("SHEARMOD")) {
+      std::vector<double> bulk = parser.getFloatingPointValue("BULKMOD");
+      std::vector<double> shear = parser.getFloatingPointValue("SHEARMOD");
       Emod.resize(bulk.size());
       Poiss.resize(bulk.size());
       for (size_t i=0;i<bulk.size();++i) {
