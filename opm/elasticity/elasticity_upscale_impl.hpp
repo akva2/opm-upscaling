@@ -580,6 +580,12 @@ IMPL_FUNC(void, loadMaterialsFromGrid(const std::string& file))
     if (parser.hasField("YOUNGMOD") && parser.hasField("POISSONMOD")) {
       Emod = parser.getFloatingPointValue("YOUNGMOD");
       Poiss = parser.getFloatingPointValue("POISSONMOD");
+      std::vector<double>::const_iterator it = std::min_element(Poiss.begin(), Poiss.end());
+      if (*it < 0) {
+        std::cerr << "Auxetic material specified for cell " << it-Poiss.begin() << std::endl
+                  << "Emod: "<< Emod[it-Poiss.begin()] << " Poisson's ratio: " << *it << std::endl << "bailing..." << std::endl;
+        exit(1);
+      }
     } else if (parser.hasField("LAMEMOD") && parser.hasField("SHEARMOD")) {
       std::vector<double> lame = parser.getFloatingPointValue("LAMEMOD");
       std::vector<double> shear = parser.getFloatingPointValue("SHEARMOD");
@@ -588,6 +594,13 @@ IMPL_FUNC(void, loadMaterialsFromGrid(const std::string& file))
       for (size_t i=0;i<lame.size();++i) {
         Emod[i]  = shear[i]*(3*lame[i]+2*shear[i])/(lame[i]+shear[i]);
         Poiss[i] = 0.5*lame[i]/(lame[i]+shear[i]);
+      }
+      std::vector<double>::const_iterator it = std::min_element(Poiss.begin(), Poiss.end());
+      if (*it < 0) {
+        std::cerr << "Auxetic material specified for cell " << it-Poiss.begin() << std::endl
+                  << "Lamè modulus: " << lame[it-Poiss.begin()] << " Shearmodulus: " << shear[it-Poiss.begin()] << std::endl
+                  << "Emod: "<< Emod[it-Poiss.begin()] << " Poisson's ratio: " << *it << std::endl << "bailing..." << std::endl;
+        exit(1);
       }
     } else if (parser.hasField("BULKMOD") && parser.hasField("SHEARMOD")) {
       std::vector<double> bulk = parser.getFloatingPointValue("BULKMOD");
@@ -598,10 +611,23 @@ IMPL_FUNC(void, loadMaterialsFromGrid(const std::string& file))
         Emod[i]  = 9*bulk[i]*shear[i]/(3*bulk[i]+shear[i]);
         Poiss[i] = 0.5*(3*bulk[i]-2*shear[i])/(3*bulk[i]+shear[i]);
       }
+      std::vector<double>::const_iterator it = std::min_element(Poiss.begin(), Poiss.end());
+      if (*it < 0) {
+        std::cerr << "Auxetic material specified for cell " << it-Poiss.begin() << std::endl
+                  << "Bulkmodulus: " << bulk[it-Poiss.begin()] << " Shearmodulus: " << shear[it-Poiss.begin()] << std::endl
+                 << "Emod: "<< Emod[it-Poiss.begin()] << " Poisson's ratio: " << *it << std::endl << "bailing..." << std::endl;
+        exit(1);
+      }
     } else if (parser.hasField("PERMX") && parser.hasField("PORO")) {
       std::cerr << "WARNING: Using PERMX and PORO for elastic material properties" << std::endl;
       Emod = parser.getFloatingPointValue("PERMX");
       Poiss = parser.getFloatingPointValue("PORO");
+      std::vector<double>::const_iterator it = std::min_element(Poiss.begin(), Poiss.end());
+      if (*it < 0) {
+        std::cerr << "Auxetic material specified for cell " << it-Poiss.begin() << std::endl
+                  << "Emod: "<< Emod[it-Poiss.begin()] << " Poisson's ratio: " << *it << std::endl << "bailing..." << std::endl;
+        exit(1);
+      }
     } else {
       std::cerr << "No material data found in eclipse file, aborting" << std::endl;
       exit(1);
