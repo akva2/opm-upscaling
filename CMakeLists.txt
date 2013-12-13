@@ -25,6 +25,8 @@ find_path (OPM_MACROS_ROOT cmake/Modules/OpmInit.cmake
 	)
 list (APPEND CMAKE_MODULE_PATH "${OPM_MACROS_ROOT}/cmake/Modules")
 
+set(USE_OPENMP_DEFAULT ON)
+
 # not the same location as most of the other projects? this hook overrides
 macro (dir_hook)
 endmacro (dir_hook)
@@ -33,6 +35,8 @@ endmacro (dir_hook)
 # we cannot generate dune.module since it is read by dunecontrol before
 # the build starts, so it makes sense to keep the data there then.
 include (OpmInit)
+
+set(USE_OPENMP_DEFAULT ON)
 
 # list of prerequisites for this particular project; this is in a
 # separate file (in cmake/Modules sub-directory) because it is shared
@@ -48,6 +52,8 @@ macro (config_hook)
 	opm_need_version_of ("dune-istl")
 	list (APPEND ${project}_CONFIG_IMPL_VARS
 		HAVE_LAPACK
+		HAVE_UMFPACK
+		HAVE_SUPERLU
 		)
 endmacro (config_hook)
 

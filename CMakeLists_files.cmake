@@ -30,10 +30,11 @@
 # find opm -name '*.c*' -printf '\t%p\n' | sort
 list (APPEND MAIN_SOURCE_FILES
 	opm/elasticity/boundarygrid.cpp
-	opm/elasticity/dynmatrixev.cpp
+	opm/elasticity/elasticity_preconditioners.cpp
 	opm/elasticity/material.cpp
 	opm/elasticity/materials.cpp
 	opm/elasticity/matrixops.cpp
+	opm/elasticity/meshcolorizer.cpp
 	opm/elasticity/mpc.cpp
 	)
 
@@ -116,9 +117,9 @@ list (APPEND PUBLIC_HEADER_FILES
 	opm/elasticity/asmhandler.hpp
 	opm/elasticity/asmhandler_impl.hpp
 	opm/elasticity/boundarygrid.hh
-	opm/elasticity/dynmatrixev.hh
 	opm/elasticity/elasticity.hpp
 	opm/elasticity/elasticity_impl.hpp
+	opm/elasticity/elasticity_preconditioners.hpp
 	opm/elasticity/elasticity_upscale.hpp
 	opm/elasticity/elasticity_upscale_impl.hpp
 	opm/elasticity/logutils.hpp
@@ -130,7 +131,6 @@ list (APPEND PUBLIC_HEADER_FILES
 	opm/elasticity/mortar_schur_precond.hpp
 	opm/elasticity/mortar_utils.hpp
 	opm/elasticity/mpc.hh
-	opm/elasticity/seqlu.hpp
 	opm/elasticity/shapefunctions.hpp
 	opm/elasticity/uzawa_solver.hpp
 	opm/upscaling/SinglePhaseUpscaler.hpp
