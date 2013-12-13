@@ -25,6 +25,8 @@ find_path (OPM_MACROS_ROOT cmake/Modules/OpmInit.cmake
 	)
 list (APPEND CMAKE_MODULE_PATH "${OPM_MACROS_ROOT}/cmake/Modules")
 
+set(USE_OPENMP_DEFAULT ON)
+
 # not the same location as most of the other projects? this hook overrides
 macro (dir_hook)
 endmacro (dir_hook)
