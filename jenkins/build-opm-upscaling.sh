@@ -46,8 +46,8 @@ function build_opm_upscaling {
   # Build opm-core
   clone_and_build_module opm-core "-DCMAKE_PREFIX_PATH=$WORKSPACE/serial/install -DCMAKE_INSTALL_PREFIX=$WORKSPACE/serial/install" $OPM_CORE_REVISION $WORKSPACE/serial
 
-  # Build dune-cornerpoint
-  clone_and_build_module dune-cornerpoint "-DCMAKE_PREFIX_PATH=$WORKSPACE/serial/install -DCMAKE_INSTALL_PREFIX=$WORKSPACE/serial/install" $DUNE_CORNERPOINT_REVISION $WORKSPACE/serial
+  # Build opm-grid
+  clone_and_build_module opm-grid "-DCMAKE_PREFIX_PATH=$WORKSPACE/serial/install -DCMAKE_INSTALL_PREFIX=$WORKSPACE/serial/install" $OPM_GRID_REVISION $WORKSPACE/serial
 
   # Build opm-output
   clone_and_build_module opm-output "-DCMAKE_PREFIX_PATH=$WORKSPACE/serial/install -DCMAKE_INSTALL_PREFIX=$WORKSPACE/serial/install" $OPM_OUTPUT_REVISION $WORKSPACE/serial
