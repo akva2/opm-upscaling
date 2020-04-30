@@ -15,6 +15,7 @@ set (opm-upscaling_DEPS
   # matrix library
   "BLAS REQUIRED"
   "LAPACK REQUIRED"
+  "OpenMP QUIET"
   # solver
   "SuperLU"
   # DUNE dependency
