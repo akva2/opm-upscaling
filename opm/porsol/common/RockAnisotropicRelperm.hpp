@@ -98,7 +98,7 @@ namespace Opm
 		std::string rockfilename = directory + rockname[i];
 		std::ifstream rock_stream(rockfilename.c_str());
 		if (!rock_stream) {
-		    OPM_THROW(std::runtime_error, "Could not open file " << rockfilename);
+            OPM_THROW(std::runtime_error, "Could not open file " + rockfilename);
 		}
 		readAnisoFormat(rock_stream, i);
 	    }

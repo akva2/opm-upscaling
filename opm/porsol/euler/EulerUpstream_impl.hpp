@@ -51,6 +51,7 @@
 #include <algorithm>
 #include <limits>
 #include <iostream>
+#include <sstream>
 
 namespace Opm
 {
@@ -341,8 +342,10 @@ namespace Opm
 	    if (s[cell] > 1.0 || s[cell] < 0.0) {
 		if (clamp_sat_) {
 		    s[cell] = std::max(std::min(s[cell], 1.0), 0.0);
-		} else if (s[cell] > 1.001 || s[cell] < -0.001) {
-		    OPM_THROW(std::runtime_error, "Saturation out of range in EulerUpstream: Cell " << cell << "   sat " << s[cell]);
+        } else if (s[cell] > 1.001 || s[cell] < -0.001) {
+            std::ostringstream str;
+            str << "Saturation out of range in EulerUpstream: Cell " << cell << "   sat " << s[cell];
+            OPM_THROW(std::runtime_error, str.str());
 		}
 	    }
 	}

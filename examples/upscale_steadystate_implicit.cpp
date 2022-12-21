@@ -56,6 +56,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <sstream>
 
 #include <sys/utsname.h>
 
@@ -103,7 +104,7 @@ std::vector<std::vector<double> > getExtremeSats(std::string rock_list, std::vec
     }
     std::ifstream rl(rock_list.c_str());
     if (!rl) {
-        OPM_THROW(std::runtime_error, "Could not open file " << rock_list);
+        OPM_THROW(std::runtime_error, "Could not open file " + rock_list);
     }
     int num_rocks = -1;
     rl >> num_rocks;
@@ -124,7 +125,7 @@ std::vector<std::vector<double> > getExtremeSats(std::string rock_list, std::vec
         rockfilelist.push_back(rockfilename);
         std::ifstream rock_stream(rockfilename.c_str());
         if (!rock_stream) {
-            OPM_THROW(std::runtime_error, "Could not open file " << rockfilename);
+            OPM_THROW(std::runtime_error, "Could not open file " + rockfilename);
         }
         
         if (! anisorocks) { //Isotropic input rocks (Sw Krw Kro J)
@@ -140,8 +141,12 @@ std::vector<std::vector<double> > getExtremeSats(std::string rock_list, std::vec
             rocksatendp[i][0] = Jtmp.getMinimumX().first;
             rocksatendp[i][1] = Jtmp.getMaximumX().first;
             if (rocksatendp[i][0] < 0 || rocksatendp[i][0] > 1) {
-                OPM_THROW(std::runtime_error, "Minimum rock saturation (" << rocksatendp[i][0] << ") not sane for rock " 
-                      << rockfilename << "." << std::endl << "Did you forget to specify anisotropicrocks=true ?");  
+                std::ostringstream str;
+                str << "Minimum rock saturation (" << rocksatendp[i][0]
+                    << ") not sane for rock "
+                    << rockfilename << "." << std::endl
+                    << "Did you forget to specify anisotropicrocks=true ?";
+                OPM_THROW(std::runtime_error, str.str());
             }
         }
         else { //Anisotropic input rocks (Pc Sw Krxx Kryy Krzz)

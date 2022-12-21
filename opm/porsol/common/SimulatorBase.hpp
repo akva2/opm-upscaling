@@ -70,6 +70,7 @@
 #include <fstream>
 #include <iterator>
 #include <iostream>
+#include <sstream>
 
 
 namespace Opm
@@ -168,20 +169,27 @@ namespace Opm
                 std::string filename = param.get<std::string>("init_saturation_filename");
                 std::ifstream satfile(filename.c_str());
                 if (!satfile) {
-                    OPM_THROW(std::runtime_error, "Could not open initial saturation file: " << filename);
+                    OPM_THROW(std::runtime_error,
+                              "Could not open initial saturation file: " + filename);
                 }
                 int num_sats;
                 satfile >> num_sats;
                 if (num_sats != ginterf_.numberOfCells()) {
-                    OPM_THROW(std::runtime_error, "Number of saturation values claimed different from number of grid cells: "
-                          << num_sats << " vs. " << ginterf_.numberOfCells());
+                    std::ostringstream str;
+                    str << "Number of saturation values claimed different from "
+                           "number of grid cells: " << num_sats
+                        << " vs. " << ginterf_.numberOfCells();
+                    OPM_THROW(std::runtime_error, str.str());
                 }
                 std::istream_iterator<double> beg(satfile);
                 std::istream_iterator<double> end;
                 init_saturation_.assign(beg, end);
                 if (int(init_saturation_.size()) != num_sats) {
-                    OPM_THROW(std::runtime_error, "Number of saturation values claimed different from actual file content: "
-                          << num_sats << " vs. " << init_saturation_.size());
+                    std::ostringstream str;
+                    str << "Number of saturation values claimed different from "
+                           "actual file content: " << num_sats
+                        << " vs. " << init_saturation_.size();
+                    OPM_THROW(std::runtime_error, str.str());
                 }
             } else {
                 double init_s = param.getDefault("init_saturation", 0.0);
